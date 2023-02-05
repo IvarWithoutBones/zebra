@@ -1,0 +1,8 @@
+[workspace]
+members = ["kernel"]
+
+[profile.dev]
+panic = "abort" # disable stack unwinding on panic
+
+[profile.release]
+panic = "abort" # disable stack unwinding on panic
