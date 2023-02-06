@@ -99,17 +99,17 @@ SECTIONS {
             that we can do all of those things.
 
             >ram - This just tells the linker script to put this entire section (.text) into the
-                   ram region of memory. To my knowledge, the '>' does not mean "greater than". Instead,
-              	 it is a symbol to let the linker know we want to put this in ram.
+                ram region of memory. To my knowledge, the '>' does not mean "greater than". Instead,
+              	it is a symbol to let the linker know we want to put this in ram.
 
             AT>ram - This sets the LMA (load memory address) region to the same thing. LMA is the final
-                     translation of a VMA (virtual memory address). With this linker script, we're loading
-              	   everything into its physical location. We'll let the kernel copy and sort out the 
-              	   virtual memory. That's why >ram and AT>ram are continually the same thing.
+                translation of a VMA (virtual memory address). With this linker script, we're loading
+              	everything into its physical location. We'll let the kernel copy and sort out the 
+              	virtual memory. That's why >ram and AT>ram are continually the same thing.
 
-            :text  - This tells the linker script to put this into the :text program header. We've only
-                     defined three: text, data, and bss. In this case, we're telling the linker script
-            		   to go into the text section.
+            :text - This tells the linker script to put this into the :text program header. We've only
+                defined three: text, data, and bss. In this case, we're telling the linker script
+            	to go into the text section.
         */
     } >ram AT>ram :text
 
@@ -155,6 +155,7 @@ SECTIONS {
             sdata sections for shorter, quicker loading sections. So, usually critical data
             is loaded there. However, we're loading all of this in one fell swoop.
             So, we're looking to put all of the following sections under the umbrella .data:
+
             .sdata
             .sdata.[anything]
             .data
