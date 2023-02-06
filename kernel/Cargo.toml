@@ -2,3 +2,7 @@
 name = "zebra-kernel"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies.packed_struct]
+version = "0.10.1"
+default-features = false # Disable std/alloc

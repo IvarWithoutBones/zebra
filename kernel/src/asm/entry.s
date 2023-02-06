@@ -41,8 +41,6 @@ clear_bss_loop:
 	la t2, trap_vector
 	csrw mtvec, t2
 
-    call print_str # TODO: remove
-
 	# Place to continue execution after `mepc` returns, this should never be reached.
 	la ra, park_hart
 
@@ -52,6 +50,7 @@ clear_bss_loop:
 # This will be called upon interrupts, no-op for now
 .global trap_vector
 trap_vector:
+    call print_str
     mret
 
 # Random stuff to get familiar with ASM
@@ -70,9 +69,4 @@ print_str_loop:
     lbu t2, (t0) # Load next character
     bnez t2, print_str_loop # Repeat unless we hit a null
 
-    mret
-
-print_num_rust:
-    li a0, 123456
-    call print_num
     mret

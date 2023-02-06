@@ -14,7 +14,7 @@ ENTRY(_start)
     at the beginning. Note: ORIGIN matches the starting address of our code.
 */
 MEMORY {
-    ram  (wxa) : ORIGIN = 0x80000000, LENGTH = 128M
+    ram (wxa) : ORIGIN = 0x80000000, LENGTH = 128M
 }
 
 /*
