@@ -15,6 +15,7 @@
     }:
     flake-utils.lib.eachDefaultSystem (system:
     let
+      lib = nixpkgs.lib;
       pkgs = import nixpkgs {
         inherit system;
         overlays = [ (import rust-overlay) ];
@@ -22,6 +23,14 @@
 
       rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
       craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
+
+      sourceCode = lib.cleanSourceWith {
+        src = self;
+        filter = path: type:
+          (lib.hasSuffix ".s" path)
+          || (lib.hasSuffix ".ld" path)
+          || (craneLib.filterCargoSources path type);
+      };
 
       zebra = pkgs.callPackage
         ({ lib
@@ -37,7 +46,10 @@
               in
               "0.pre+date=${year}-${month}-${day}";
 
-            src = craneLib.cleanCargoSource self;
+            src = sourceCode;
+
+            # Tests are broken inside of the sandbox, they cannot find the `test` crate.
+            doCheck = false;
 
             meta = with lib; {
               license = licenses.asl20;
@@ -45,18 +57,41 @@
             };
           })
         { inherit craneLib; };
+
+      zebra-runner = pkgs.callPackage
+        ({ lib
+         , writeShellScriptBin
+         , zebra
+         , qemu
+         }:
+          writeShellScriptBin "zebra" ''
+            ${qemu}/bin/qemu-system-riscv64 \
+              -machine virt \
+              -cpu rv64 \
+              -smp 2 \
+              -m 128M \
+              -bios none \
+              -nographic \
+              -serial mon:stdio \
+              -kernel ${zebra}/bin/zebra-kernel
+          '')
+        { inherit zebra; };
     in
     {
-      packages.default = zebra;
+      packages = {
+        default = zebra-runner;
+        inherit zebra zebra-runner;
+      };
 
       devShells.default = pkgs.mkShell {
         inputsFrom = [ zebra ];
 
-        packages = with pkgs; [
+        packages = [
           rustToolchain.availableComponents.rust-analyzer
+          rustToolchain.availableComponents.clippy
           rustToolchain
-          qemu
-          cargo-binutils
+          pkgs.cargo-binutils
+          pkgs.qemu
         ];
       };
     });
