@@ -7,6 +7,7 @@
 #[cfg(test)]
 fn test_runner(_tests: &[&dyn Fn()]) {}
 
+mod spinlock;
 mod uart;
 
 use core::{
@@ -26,12 +27,12 @@ unsafe extern "C" fn park_hart() -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     if let Some(s) = info.payload().downcast_ref::<&str>() {
-        print!("panicked: ", s);
+        print!("panicked: {}", s);
     } else {
         if let Some(msg) = info.message() {
             print!("panicked at '");
             if let Some(str) = msg.as_str() {
-                print!(str);
+                print!("{}", str);
             } else {
                 print!("unknown");
             }
@@ -39,10 +40,7 @@ fn panic(info: &PanicInfo) -> ! {
         }
 
         if let Some(loc) = info.location() {
-            print!(loc.file(), ":");
-            print_num!(loc.line() as _);
-            print!(":");
-            print_num!(loc.column() as _);
+            print!("{}:{}:{}", loc.file(), loc.line(), loc.column());
         }
     }
     println!();
@@ -51,7 +49,7 @@ fn panic(info: &PanicInfo) -> ! {
 
 #[no_mangle]
 extern "C" fn kernel_main() {
-    uart::UART.init();
+    uart::UART.lock_with(|uart| uart.init());
     println!("kernel_main() called, we have reached Rust!");
 
     unsafe {
@@ -59,13 +57,8 @@ extern "C" fn kernel_main() {
     }
 
     loop {
-        if let Some(c) = uart::UART.poll() {
-            let as_arr = &[c];
-            let as_str = core::str::from_utf8(as_arr).unwrap_or("invalid utf8");
-            print!("got char: '", as_str, "' (0x");
-            print_num!(c as _, 16);
-            println!(")");
-
+        if let Some(c) = uart::UART.lock_with(|uart| uart.poll()) {
+            println!("got char: '{}' (0x{:02X})", c as char, c);
             if c == b'q' {
                 break;
             }
