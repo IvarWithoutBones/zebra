@@ -1,14 +1,14 @@
 #![no_std]
 #![no_main]
 #![feature(panic_info_message)]
-// Tests dont do anything for now, but this shuts up rust-analyzer
 #![feature(custom_test_frameworks)]
 #![test_runner(test_runner)]
-#[cfg(test)]
-fn test_runner(_tests: &[&dyn Fn()]) {}
+#![reexport_test_harness_main = "test_main"]
 
-mod spinlock;
+#[macro_use]
 mod uart;
+mod power;
+mod spinlock;
 
 use core::{
     arch::{asm, global_asm},
@@ -17,40 +17,45 @@ use core::{
 
 global_asm!(include_str!("./asm/entry.s"));
 
-#[no_mangle]
-unsafe extern "C" fn park_hart() -> ! {
-    unsafe {
-        asm!("wfi", "j {park}", park = sym park_hart, options(noreturn));
+#[cfg(test)]
+trait Testable {
+    fn run(&self) -> ();
+}
+
+#[cfg(test)]
+impl<T> Testable for T
+where
+    T: Fn(),
+{
+    fn run(&self) {
+        print!("{}...\t", core::any::type_name::<T>());
+        self();
+        println!("[ok]");
     }
+}
+
+#[cfg(test)]
+fn test_runner(tests: &[&dyn Testable]) {
+    println!("Running {} tests", tests.len());
+    for test in tests {
+        test.run()
+    }
+    power::shutdown(power::ExitType::Success)
 }
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    if let Some(s) = info.payload().downcast_ref::<&str>() {
-        print!("panicked: {}", s);
-    } else {
-        if let Some(msg) = info.message() {
-            print!("panicked at '");
-            if let Some(str) = msg.as_str() {
-                print!("{}", str);
-            } else {
-                print!("unknown");
-            }
-            print!("', ");
-        }
-
-        if let Some(loc) = info.location() {
-            print!("{}:{}:{}", loc.file(), loc.line(), loc.column());
-        }
-    }
-    println!();
-    unsafe { park_hart() }
+    println!("{:#}", info);
+    power::shutdown(power::ExitType::Failure)
 }
 
 #[no_mangle]
 extern "C" fn kernel_main() {
     uart::UART.lock_with(|uart| uart.init());
     println!("kernel_main() called, we have reached Rust!");
+
+    #[cfg(test)]
+    test_main();
 
     unsafe {
         asm!("li t4, 0xFEEDFACECAFEBEEF");
@@ -60,9 +65,24 @@ extern "C" fn kernel_main() {
         if let Some(c) = uart::UART.lock_with(|uart| uart.poll()) {
             println!("got char: '{}' (0x{:02X})", c as char, c);
             if c == b'q' {
+                println!("shutting down");
+                power::shutdown(power::ExitType::Success);
+            } else if c == b'r' {
+                println!("rebooting");
+                power::shutdown(power::ExitType::Reboot);
+            } else if c == b'p' {
                 break;
             }
         }
     }
+
     panic!("intended panic because we shutdown technology is for fools");
+}
+
+#[cfg(test)]
+mod tests {
+    #[test_case]
+    fn basic() {
+        assert!(true);
+    }
 }

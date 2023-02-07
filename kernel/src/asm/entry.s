@@ -47,6 +47,10 @@ clear_bss_loop:
 	# Update mstatus and jump to `mepc`
 	mret
 
+park_hart:
+    wfi
+    j park_hart
+
 # This will be called upon interrupts, no-op for now
 .global trap_vector
 trap_vector:
@@ -56,7 +60,7 @@ trap_vector:
 # Random stuff to get familiar with ASM
 
 .align 3
-test: .ascii "this is being printed from ASM\n\0"
+test: .ascii "trap called!\n\0"
 
 print_str:
     la t0, test
