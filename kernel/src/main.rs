@@ -7,6 +7,7 @@
 
 #[macro_use]
 mod uart;
+mod page;
 mod power;
 mod spinlock;
 
@@ -16,6 +17,7 @@ use core::{
 };
 
 global_asm!(include_str!("./asm/entry.s"));
+global_asm!(include_str!("./asm/symbols.s"));
 
 #[cfg(test)]
 trait Testable {
@@ -61,6 +63,8 @@ extern "C" fn kernel_main() {
         asm!("li t4, 0xFEEDFACECAFEBEEF");
     }
 
+    let mut pages: [Option<*mut u8>; 1024] = [None; 1024];
+    let mut page_idx = 0;
     loop {
         if let Some(c) = uart::UART.lock_with(|uart| uart.poll()) {
             println!("got char: '{}' (0x{:02X})", c as char, c);
@@ -70,6 +74,21 @@ extern "C" fn kernel_main() {
             } else if c == b'r' {
                 println!("rebooting");
                 power::shutdown(power::ExitType::Reboot);
+            } else if c == b'a' {
+                let ptr = page::allocate(2).unwrap();
+                println!();
+                page::print();
+                pages[page_idx] = Some(ptr);
+                page_idx += 1;
+                println!()
+            } else if c == b'f' {
+                assert!(page_idx > 0);
+                page_idx -= 1;
+                let ptr = pages[page_idx].unwrap();
+                page::deallocate(ptr);
+                println!();
+                page::print();
+                println!()
             } else if c == b'p' {
                 break;
             }
