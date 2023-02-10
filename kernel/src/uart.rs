@@ -1,4 +1,8 @@
-use {super::spinlock::Spinlock, core::fmt, packed_struct::prelude::*};
+use {
+    tartan_bitfield::bitfield,
+    tartan_c_enum::c_enum,
+    {super::spinlock::Spinlock, core::fmt},
+};
 
 // See device-trees/qemu-virt.dts
 pub static UART: Spinlock<NS16550a<0x1000_0000>> = Spinlock::new(NS16550a::new());
@@ -7,11 +11,10 @@ trait UartRegister {
     fn ptr_offset() -> usize;
 }
 
-#[derive(PackedStruct)]
-#[packed_struct(bit_numbering = "lsb0", size_bytes = "1")]
-struct Interrupt {
-    #[packed_field(bits = "0")]
-    enable: bool,
+bitfield! {
+    struct Interrupt(u8) {
+        [0] enabled,
+    }
 }
 
 impl UartRegister for Interrupt {
@@ -20,11 +23,10 @@ impl UartRegister for Interrupt {
     }
 }
 
-#[derive(PackedStruct)]
-#[packed_struct(bit_numbering = "lsb0", size_bytes = "1")]
-struct Fifo {
-    #[packed_field(bits = "0")]
-    enable: bool,
+bitfield! {
+    struct Fifo(u8) {
+        [0] enabled,
+    }
 }
 
 impl UartRegister for Fifo {
@@ -33,21 +35,20 @@ impl UartRegister for Fifo {
     }
 }
 
-#[derive(PrimitiveEnum_u8, Copy, Clone)]
-enum WordLength {
-    Five = 0,
-    Six = 1,
-    Seven = 2,
-    Eight = 3,
+c_enum! {
+    enum WordLength(u8) {
+        Five = 0,
+        Six = 1,
+        Seven = 2,
+        Eight = 3,
+    }
 }
 
-#[derive(PackedStruct)]
-#[packed_struct(bit_numbering = "lsb0", size_bytes = "1")]
-struct LineControl {
-    #[packed_field(bits = "0..=2", ty = "enum")]
-    word_length: WordLength,
-    #[packed_field(bits = "3")]
-    parity_enable: bool,
+bitfield! {
+    struct LineControl(u8) {
+        [0..=2] word_length: u8 as WordLength,
+        [3] parity_enable,
+    }
 }
 
 impl UartRegister for LineControl {
@@ -56,17 +57,13 @@ impl UartRegister for LineControl {
     }
 }
 
-#[derive(PackedStruct)]
-#[packed_struct(bit_numbering = "lsb0", size_bytes = "1")]
-struct LineStatus {
-    #[packed_field(bits = "0")]
-    data_ready: bool,
-    #[packed_field(bits = "1")]
-    overrun_error: bool,
-    #[packed_field(bits = "2")]
-    parity_error: bool,
-    #[packed_field(bits = "3")]
-    framing_error: bool,
+bitfield! {
+    struct LineStatus(u8) {
+        [0] data_ready,
+        [1] overrun_error,
+        [2] parity_error,
+        [3] framing_error,
+    }
 }
 
 impl UartRegister for LineStatus {
@@ -91,44 +88,68 @@ impl<const BASE_ADDR: usize> NS16550a<BASE_ADDR> {
     const BASE_PTR: *mut u8 = BASE_ADDR as _;
 
     const fn new() -> Self {
+        let interrupt = Interrupt { 0: 0 };
+        let line_control = LineControl { 0: 0 };
+        let fifo = Fifo { 0: 0 };
+
         Self {
-            interrupt: Interrupt { enable: true },
-            fifo: Fifo { enable: true },
-            line_control: LineControl {
-                word_length: WordLength::Eight,
-                parity_enable: false,
-            },
+            interrupt,
+            fifo,
+            line_control,
         }
     }
 
-    pub fn init(&self) {
-        self.write::<Interrupt>(self.interrupt.pack().unwrap()[0]);
-        self.write::<Fifo>(self.fifo.pack().unwrap()[0]);
-        self.write::<LineControl>(self.line_control.pack().unwrap()[0]);
+    pub fn init(&mut self) {
+        self.interrupt.set_enabled(true);
+        self.fifo.set_enabled(true);
+        self.line_control.set_word_length(WordLength::Eight);
+        self.line_control.set_parity_enable(false);
+
+        self.write_register(self.interrupt);
+        self.write_register(self.fifo);
+        self.write_register(self.line_control);
     }
 
     pub fn poll(&self) -> Option<u8> {
-        let status = LineStatus::unpack(&[self.read::<LineStatus>()]).ok()?;
-        if status.data_ready {
-            Some(self.read::<Self>())
+        let status = self.read_register::<LineStatus>();
+        if status.data_ready() {
+            Some(self.read())
         } else {
             None
         }
     }
 
-    fn read<T: UartRegister>(&self) -> u8 {
-        unsafe { Self::BASE_PTR.add(T::ptr_offset()).read_volatile() }
+    fn read(&self) -> u8 {
+        unsafe { Self::BASE_PTR.read_volatile() }
     }
 
-    fn write<T: UartRegister>(&self, data: u8) {
-        unsafe { Self::BASE_PTR.add(T::ptr_offset()).write_volatile(data) }
+    fn write(&self, data: u8) {
+        unsafe { Self::BASE_PTR.write_volatile(data) }
+    }
+
+    fn read_register<T>(&self) -> T
+    where
+        T: UartRegister + From<u8>,
+    {
+        T::from(unsafe { Self::BASE_PTR.add(T::ptr_offset()).read_volatile() })
+    }
+
+    fn write_register<T>(&self, data: T)
+    where
+        T: UartRegister + Into<u8>,
+    {
+        unsafe {
+            Self::BASE_PTR
+                .add(T::ptr_offset())
+                .write_volatile(data.into())
+        }
     }
 }
 
 impl<const BASE_ADDR: usize> fmt::Write for NS16550a<BASE_ADDR> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for &byte in s.as_bytes() {
-            self.write::<Self>(byte);
+            self.write(byte);
         }
         Ok(())
     }
