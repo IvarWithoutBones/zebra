@@ -1,63 +1,30 @@
+#![feature(panic_info_message, custom_test_frameworks)]
+#![reexport_test_harness_main = "test_entry_point"]
+#![test_runner(language_items::test_runner)]
 #![no_std]
 #![no_main]
-#![feature(panic_info_message)]
-#![feature(custom_test_frameworks)]
-#![test_runner(test_runner)]
-#![reexport_test_harness_main = "test_main"]
 
 #[macro_use]
-mod uart;
+mod language_items;
 mod page;
 mod power;
 mod spinlock;
+mod uart;
 
-use core::{
-    arch::{asm, global_asm},
-    panic::PanicInfo,
-};
+use core::arch::{asm, global_asm};
 
 global_asm!(include_str!("./asm/entry.s"));
 global_asm!(include_str!("./asm/symbols.s"));
-
-#[cfg(test)]
-trait Testable {
-    fn run(&self) -> ();
-}
-
-#[cfg(test)]
-impl<T> Testable for T
-where
-    T: Fn(),
-{
-    fn run(&self) {
-        print!("{}...\t", core::any::type_name::<T>());
-        self();
-        println!("[ok]");
-    }
-}
-
-#[cfg(test)]
-fn test_runner(tests: &[&dyn Testable]) {
-    println!("Running {} tests", tests.len());
-    for test in tests {
-        test.run()
-    }
-    power::shutdown(power::ExitType::Success)
-}
-
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    println!("{:#}", info);
-    power::shutdown(power::ExitType::Failure)
-}
 
 #[no_mangle]
 extern "C" fn kernel_main() {
     uart::UART.lock_with(|uart| uart.init());
     println!("kernel_main() called, we have reached Rust!");
 
+    // Start executing the reexported test harness's entry point.
+    // This will shut down the system when testing is complete.
     #[cfg(test)]
-    test_main();
+    test_entry_point();
 
     unsafe {
         asm!("li t4, 0xFEEDFACECAFEBEEF");

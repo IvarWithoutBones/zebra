@@ -1,0 +1,69 @@
+///! Integration for Rust language features that are not implemented by default on `no_std`.
+
+#[cfg(test)]
+use core::any::type_name;
+use {super::power, core::panic::PanicInfo};
+
+/// Printing function that use the UART to print to standard output.
+#[macro_export]
+macro_rules! print {
+    ($($args:tt)+) => {{
+        use core::fmt::Write;
+        $crate::uart::UART.lock_with(|uart| {
+            let _ = write!(uart, $($args)+);
+        })
+    }};
+}
+
+/// Printing function that use the UART to print to standard output, with a newline.
+#[macro_export]
+macro_rules! println {
+    () => {
+        $crate::print!("\r\n")
+    };
+
+    ($fmt:expr) => {
+		$crate::print!(concat!($fmt, "\r\n"))
+	};
+
+    ($fmt:expr, $($args:tt)+) => {
+		$crate::print!(concat!($fmt, "\r\n"), $($args)+)
+	};
+}
+
+/// A wrapper around `Fn()` which can be used as a trait object,
+/// used to allow fetching the name of the test function.
+#[cfg(test)]
+pub trait Testable {
+    fn run(&self) -> ();
+}
+
+#[cfg(test)]
+impl<T> Testable for T
+where
+    T: Fn(),
+{
+    fn run(&self) {
+        print!("{}...\t", type_name::<T>());
+        self();
+        println!("[ok]");
+    }
+}
+
+/// The entry point for `cargo test`, called by the `test_runner` exported in `main.rs`.
+#[cfg(test)]
+pub fn test_runner(tests: &[&dyn Testable]) {
+    println!("Running {} tests", tests.len());
+    for test in tests {
+        test.run()
+    }
+    power::shutdown(power::ExitType::Success)
+}
+
+/// Called on panic, prints the panic message and shuts down the system.
+/// Note that this only covers panics from Rust itself, not CPU exceptions.
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    println!("{:#}", info);
+    power::shutdown(power::ExitType::Failure)
+}

@@ -132,28 +132,3 @@ impl<const BASE_ADDR: usize> fmt::Write for NS16550a<BASE_ADDR> {
         Ok(())
     }
 }
-
-#[macro_export]
-macro_rules! print {
-    ($($args:tt)+) => {{
-        use core::fmt::Write;
-        $crate::uart::UART.lock_with(|uart| {
-            let _ = write!(uart, $($args)+);
-        })
-    }};
-}
-
-#[macro_export]
-macro_rules! println {
-    () => {
-        $crate::print!("\r\n")
-    };
-
-    ($fmt:expr) => ({
-		$crate::print!(concat!($fmt, "\r\n"))
-	});
-
-    ($fmt:expr, $($args:tt)+) => ({
-		print!(concat!($fmt, "\r\n"), $($args)+)
-	});
-}
