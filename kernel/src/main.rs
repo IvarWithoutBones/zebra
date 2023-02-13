@@ -4,6 +4,8 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
 #[macro_use]
 mod language_items;
 mod memory;
@@ -26,10 +28,17 @@ extern "C" fn kernel_main() {
     uart::UART.lock_with(|uart| uart.init());
     println!("kernel_main() called, we have reached Rust!");
 
+    unsafe {
+        memory::allocator::init();
+        println!("initialized the allocator");
+    };
+
     // Start executing the reexported test harness's entry point.
     // This will shut down the system when testing is complete.
     #[cfg(test)]
     test_entry_point();
+
+    let mut some_container = alloc::vec::Vec::new();
 
     loop {
         if let Some(b) = uart::UART.lock_with(|uart| uart.poll()) {
@@ -47,9 +56,13 @@ extern "C" fn kernel_main() {
                     power::shutdown(power::ExitType::Reboot);
                 }
 
-                'p' => break,
+                'p' => {
+                    println!("characters: {:?}", some_container);
+                }
 
-                _ => (),
+                'b' => break,
+
+                _ => some_container.push(c),
             }
         }
     }

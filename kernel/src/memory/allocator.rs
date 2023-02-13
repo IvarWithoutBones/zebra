@@ -1,7 +1,14 @@
 use {
-    super::{align_page_up, PAGE_SIZE, TOTAL_PAGES},
+    super::{
+        align_page_up,
+        page::{EntryAttributes, Table, KERNEL_PAGE_TABLE},
+        symbols, PAGE_SIZE, TOTAL_PAGES,
+    },
     crate::spinlock::Spinlock,
+    core::alloc::{GlobalAlloc, Layout},
 };
+
+static ALLOCATOR: Spinlock<Allocator> = Spinlock::new(Allocator::new());
 
 struct Allocator {
     /// Keeps track of which pages are free.
@@ -70,18 +77,12 @@ impl Allocator {
     }
 }
 
-static ALLOCATOR: Spinlock<Allocator> = Spinlock::new(Allocator::new());
-
+// TODO: should probably move this to the parent module
 pub unsafe fn init() {
-    use super::{
-        page::{EntryAttributes, Table, KERNEL_PAGE_TABLE},
-        symbols,
-    };
-
     // TODO: move
     const UART_ADDR: usize = 0x1000_0000;
 
-    // Initialize the heap.
+    // Initialize the heap
     let mut alloc = ALLOCATOR.lock();
     alloc.base_addr = align_page_up(symbols::HEAP_START());
     for page in alloc.pages.iter_mut() {
@@ -132,24 +133,17 @@ pub unsafe fn init() {
     page_table.kernel_map(UART_ADDR, UART_ADDR, EntryAttributes::RW as usize);
 }
 
-pub fn init_hart() {
-    use {
-        super::page::{Table, KERNEL_PAGE_TABLE},
-        core::arch::asm,
-    };
+struct KernelAllocator;
 
-    // TODO: move
-    let build_satp = |mode: usize, asid: usize, addr: usize| -> usize {
-        assert!(addr % PAGE_SIZE == 0);
-        (mode as usize) << 60 | (asid & 0xffff) << 44 | (addr >> 12) & 0xff_ffff_ffff
-    };
+unsafe impl GlobalAlloc for KernelAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        ALLOCATOR.lock().allocate(layout.size()).unwrap()
+    }
 
-    let root_table = &KERNEL_PAGE_TABLE as *const Table as usize;
-    let satp = build_satp(8, 0, root_table);
-
-    unsafe {
-        asm!("csrw satp, {satp}", satp = in(reg) satp);
-        // Refresh the TLB
-        asm!("sfence.vma");
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        ALLOCATOR.lock().deallocate(ptr);
     }
 }
+
+#[global_allocator]
+static KERNEL_ALLOCATOR: KernelAllocator = KernelAllocator;

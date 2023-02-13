@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-mod allocator;
+pub mod allocator;
 mod page;
 
 const PAGE_ORDER: usize = 12;
