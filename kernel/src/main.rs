@@ -15,6 +15,12 @@ use core::arch::global_asm;
 
 global_asm!(include_str!("./asm/entry.s"));
 
+/// Temporarily used for the trap vectors from ASM.
+#[no_mangle]
+extern "C" fn print_num(num: usize) {
+    println!("print_num: {:#X}", num);
+}
+
 #[no_mangle]
 extern "C" fn kernel_main() {
     uart::UART.lock_with(|uart| uart.init());

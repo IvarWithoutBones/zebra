@@ -10,14 +10,11 @@ _start:
 	la gp, _global_pointer
     .option pop
 
-	# Should be zero but let's make sure
-	csrw satp, zero
-
-	# Any hardware threads (hart) other than hart 0 should park
+	# Any hardware threads (harts) other than hart 0 should park
 	csrr t0, mhartid
 	bnez t0, park_hart
 
-	# Clear the BSS section
+	# Clear the BSS section to avoid UB
 	la a0, _bss_start
 	la a1, _bss_end
 clear_bss_loop:
@@ -25,52 +22,43 @@ clear_bss_loop:
 	addi a0, a0, 8
 	bltu a0, a1, clear_bss_loop
 
-    # Initialize the stack
+    # Initialize the stack, assuming one hart
 	la sp, _stack_end
 
-	# 0b11 << 11: Machine's previous protection mode is 3 (MPP=3).
-	li t0, 0b11 << 11 | (1 << 13)
+	# Disable paging
+	csrw satp, zero
+
+	# Set the machine mode trap handler
+	la t0, m_trap_vector
+	csrw mtvec, t0
+
+    # Set the Machine Previous Privilege mode to 1 (Supervisor mode), this will apply once we call `mret`.
+    li t0, 0b01 << 11
 	csrw mstatus, t0
 
-	# Machine's exception program counter (MEPC) is set to our Rust entry point,
-    # we will jump to this when we call `mret` below.
-	la t1, kernel_main
-	csrw mepc, t1
+    # Set the Physical Memory Protection to allow Supervisor mode to access all memory
+    li t0, 0x3fffffffffffff
+    csrw pmpaddr0, t0
+    li t0, 0xf
+    csrw pmpcfg0, t0
 
-	# Set up the trap handler, will be used for interrupts.
-	la t2, trap_vector
-	csrw mtvec, t2
+	# Set the kernels entry point
+	la t0, kernel_main
+	csrw mepc, t0
 
-	# Place to continue execution after `mepc` returns, this should never be reached.
+	# Place to continue execution after the kernel has finished
 	la ra, park_hart
 
-	# Update mstatus and jump to `mepc`
+	# Jump to the kernel and enter supervisor mode
 	mret
 
 park_hart:
     wfi
     j park_hart
 
-# This will be called upon interrupts, no-op for now
+# This will be called upon interrupts/exceptions
 .global trap_vector
-trap_vector:
-    call print_str
-    mret
-
-# Random stuff to get familiar with ASM
-
-.align 3
-test: .ascii "trap called!\n\0"
-
-print_str:
-    la t0, test
-    li t1, 0x10000000 # UART
-
-    lbu t2, (t0)
-print_str_loop:
-    sb t2, (t1) # Write current character to UART
-    addi t0, t0, 1 # Increment pointer to next character
-    lbu t2, (t0) # Load next character
-    bnez t2, print_str_loop # Repeat unless we hit a null
-
+m_trap_vector:
+    csrr a0, mcause
+    call print_num
     mret

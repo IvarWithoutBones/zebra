@@ -131,3 +131,25 @@ pub unsafe fn init() {
     // Map the UART
     page_table.kernel_map(UART_ADDR, UART_ADDR, EntryAttributes::RW as usize);
 }
+
+pub fn init_hart() {
+    use {
+        super::page::{Table, KERNEL_PAGE_TABLE},
+        core::arch::asm,
+    };
+
+    // TODO: move
+    let build_satp = |mode: usize, asid: usize, addr: usize| -> usize {
+        assert!(addr % PAGE_SIZE == 0);
+        (mode as usize) << 60 | (asid & 0xffff) << 44 | (addr >> 12) & 0xff_ffff_ffff
+    };
+
+    let root_table = &KERNEL_PAGE_TABLE as *const Table as usize;
+    let satp = build_satp(8, 0, root_table);
+
+    unsafe {
+        asm!("csrw satp, {satp}", satp = in(reg) satp);
+        // Refresh the TLB
+        asm!("sfence.vma");
+    }
+}
