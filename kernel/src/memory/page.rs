@@ -1,4 +1,7 @@
-use super::{align_page_down, align_page_up, PAGE_SIZE};
+use {
+    super::{align_page_down, align_page_up, PAGE_SIZE},
+    core::ptr::read_volatile,
+};
 
 const TABLE_LEN: usize = 512;
 
@@ -180,8 +183,11 @@ impl Table {
                     EntryAttributes::Valid as usize,
                 );
 
-                let entry = v.paddr().0 as *mut Entry;
-                v = unsafe { entry.add(vpn.idx(lvl)).as_mut().unwrap() };
+                v = unsafe {
+                    // We need volatile as this gets optimized out otherwise
+                    let entry: *mut Entry = read_volatile(&v.paddr().0 as *const _) as _;
+                    entry.add(vpn.idx(lvl)).as_mut().unwrap()
+                };
             }
         }
 
@@ -200,8 +206,11 @@ impl Table {
                 return None;
             }
 
-            let entry = v.paddr().0 as *mut Entry;
-            v = unsafe { entry.add(vpn.idx(lvl)).as_mut().unwrap() };
+            v = unsafe {
+                // We need volatile as this gets optimized out otherwise
+                let entry: *mut Entry = read_volatile(&v.paddr().0 as *const _) as _;
+                entry.add(vpn.idx(lvl)).as_mut().unwrap()
+            };
         }
 
         assert!(v.is_valid() && v.is_leaf());
