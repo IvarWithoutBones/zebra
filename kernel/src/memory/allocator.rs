@@ -5,10 +5,27 @@ use {
         symbols, PAGE_SIZE, TOTAL_PAGES,
     },
     crate::spinlock::Spinlock,
-    core::alloc::{GlobalAlloc, Layout},
+    core::{
+        alloc::{GlobalAlloc, Layout},
+        arch::asm,
+        ptr,
+    },
 };
 
+#[global_allocator]
 static ALLOCATOR: Spinlock<Allocator> = Spinlock::new(Allocator::new());
+
+unsafe impl GlobalAlloc for Spinlock<Allocator> {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        self.lock()
+            .allocate(layout.size())
+            .unwrap_or(ptr::null_mut())
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        self.lock().deallocate(ptr);
+    }
+}
 
 struct Allocator {
     /// Keeps track of which pages are free.
@@ -78,72 +95,84 @@ impl Allocator {
 }
 
 // TODO: should probably move this to the parent module
+// NOTE: Before this is called heap allocations will deadlock the kernel!
 pub unsafe fn init() {
     // TODO: move
     const UART_ADDR: usize = 0x1000_0000;
+    const SIFIVE_TEST_REG: usize = 0x100000;
 
-    // Initialize the heap
-    let mut alloc = ALLOCATOR.lock();
-    alloc.base_addr = align_page_up(symbols::HEAP_START());
-    for page in alloc.pages.iter_mut() {
-        *page = 0;
-    }
+    println!("initializing allocator...");
+
+    ALLOCATOR.lock_with(|alloc| {
+        alloc.base_addr = align_page_up(symbols::HEAP_START());
+    });
 
     // Some funky unsafe syntax to bypass the borrow checker
     let page_table: &mut Table = &mut *(&KERNEL_PAGE_TABLE as *const _ as *mut _);
 
+    println!("mapping kernel sections...");
+
     // Map all of our sections
-    page_table.id_map_range(
+    page_table.identity_map(
         symbols::TEXT_START(),
         symbols::TEXT_END(),
         EntryAttributes::RX as usize,
     );
 
-    page_table.id_map_range(
+    page_table.identity_map(
         symbols::RODATA_START(),
         symbols::RODATA_END(),
         EntryAttributes::RX as usize,
     );
 
-    page_table.id_map_range(
+    page_table.identity_map(
         symbols::DATA_START(),
         symbols::DATA_END(),
         EntryAttributes::RW as usize,
     );
 
-    page_table.id_map_range(
+    page_table.identity_map(
         symbols::BSS_START(),
         symbols::BSS_END(),
         EntryAttributes::RW as usize,
     );
 
-    page_table.id_map_range(
+    page_table.identity_map(
         symbols::STACK_START(),
         symbols::STACK_END(),
         EntryAttributes::RW as usize,
     );
 
-    page_table.id_map_range(
+    page_table.identity_map(
         symbols::HEAP_START(),
         symbols::HEAP_END(),
         EntryAttributes::RW as usize,
     );
 
-    // Map the UART
     page_table.kernel_map(UART_ADDR, UART_ADDR, EntryAttributes::RW as usize);
+    page_table.kernel_map(
+        SIFIVE_TEST_REG,
+        SIFIVE_TEST_REG,
+        EntryAttributes::RW as usize,
+    );
+
+    println!("succesfully mapped kernel sections");
+    init_paging();
+    println!("allocator initialized");
 }
 
-struct KernelAllocator;
+pub fn init_paging() {
+    println!("initializing paging...");
+    let root = &KERNEL_PAGE_TABLE as *const Table as usize;
+    let satp = {
+        let mode = 8; // Sv39
+        (root / PAGE_SIZE) | (mode << 60)
+    };
 
-unsafe impl GlobalAlloc for KernelAllocator {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        ALLOCATOR.lock().allocate(layout.size()).unwrap()
+    unsafe {
+        // NOTE: `sfence.vma` is not required, the TLB will be freshly populated on the next memory access
+        asm!("csrw satp, {}", in(reg) satp);
     }
 
-    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-        ALLOCATOR.lock().deallocate(ptr);
-    }
+    println!("paging enabled");
 }
-
-#[global_allocator]
-static KERNEL_ALLOCATOR: KernelAllocator = KernelAllocator;

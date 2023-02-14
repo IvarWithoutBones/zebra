@@ -33,7 +33,7 @@ clear_bss_loop:
 	csrw mtvec, t0
 
     # Set the Machine Previous Privilege mode to 1 (Supervisor mode), this will apply once we call `mret`.
-    li t0, 0b01 << 11
+    li t0, 1 << 11
 	csrw mstatus, t0
 
     # Set the Physical Memory Protection to allow Supervisor mode to access all memory

@@ -30,7 +30,6 @@ extern "C" fn kernel_main() {
 
     unsafe {
         memory::allocator::init();
-        println!("initialized the allocator");
     };
 
     // Start executing the reexported test harness's entry point.
