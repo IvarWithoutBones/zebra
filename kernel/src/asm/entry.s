@@ -10,7 +10,7 @@ _start:
 	la gp, _global_pointer
     .option pop
 
-	# Any hardware threads (harts) other than hart 0 should park
+	# Any hardware threads (harts) other than hart 0 should park until multithreading is implemented
 	csrr t0, mhartid
 	bnez t0, park_hart
 
@@ -25,40 +25,37 @@ clear_bss_loop:
     # Initialize the stack, assuming one hart
 	la sp, _stack_end
 
-	# Disable paging
-	csrw satp, zero
+    # Set a Machine trap handler. This should never be called as we delegate all traps to user mode.
+    # In the odd scenario that it is called, we will print the cause and panic the kernel.
+    la t0, m_trap_vector
+    csrw mtvec, t0
 
-	# Set the machine mode trap handler
-	la t0, m_trap_vector
-	csrw mtvec, t0
+    # Delegate all traps to Supervisor
+    li t0, 0xffffffffffffff
+    csrw medeleg, t0
 
-    # Set the Machine Previous Privilege mode to 1 (Supervisor mode), this will apply once we call `mret`.
+    # Set the Machine Previous Privilege mode to Supervisor, this will apply once we call `mret`
     li t0, 1 << 11
 	csrw mstatus, t0
 
-    # Set the Physical Memory Protection to allow Supervisor mode to access all memory
-    li t0, 0x3fffffffffffff
-    csrw pmpaddr0, t0
+    # Set the Physical Memory Protection to allow Supervisor to access all memory
     li t0, 0xf
     csrw pmpcfg0, t0
 
-	# Set the kernels entry point
+	# Temporarily disable paging, will be enabled by the kernel once its ready
+	csrw satp, zero
+
+	# Set up the jump to the kernels entry point
 	la t0, kernel_main
 	csrw mepc, t0
 
-	# Place to continue execution after the kernel has finished
+	# Place to continue execution after the kernel has finished (should never be reached)
 	la ra, park_hart
 
-	# Jump to the kernel and enter supervisor mode
+	# Enter supervisor mode and jump to the kernel
 	mret
 
+.global park_hart
 park_hart:
     wfi
     j park_hart
-
-# This will be called upon interrupts/exceptions
-.global trap_vector
-m_trap_vector:
-    csrr a0, mcause
-    call print_num
-    mret

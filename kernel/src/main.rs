@@ -1,4 +1,4 @@
-#![feature(panic_info_message, custom_test_frameworks)]
+#![feature(panic_info_message, custom_test_frameworks, fn_align)]
 #![reexport_test_harness_main = "test_entry_point"]
 #![test_runner(language_items::test_runner)]
 #![no_std]
@@ -14,20 +14,41 @@ mod sections;
 mod spinlock;
 mod uart;
 
-use core::arch::global_asm;
+use core::arch::{asm, global_asm};
 
 global_asm!(include_str!("./asm/entry.s"));
 
-/// Temporarily used for the trap vectors from ASM.
 #[no_mangle]
-extern "C" fn print_num(num: usize) {
-    println!("print_num: {:#X}", num);
+#[repr(align(4))]
+extern "C" fn m_trap_vector() {
+    let cause = unsafe {
+        let cause: usize;
+        asm!("csrr {}, mcause", out(reg) cause);
+        cause
+    };
+    unreachable!("machine trap: {cause}");
+}
+
+#[repr(align(4))]
+extern "C" fn s_trap_vector() {
+    let cause = unsafe {
+        let cause: usize;
+        asm!("csrr {}, scause", out(reg) cause);
+        cause
+    };
+    println!("supervisor trap: {cause}");
 }
 
 #[no_mangle]
 extern "C" fn kernel_main() {
     uart::UART.lock_with(|uart| uart.init());
     println!("kernel_main() called, we have reached Rust!");
+
+    // Set the supervisor trap handler
+    unsafe {
+        asm!("la a0, {}", sym s_trap_vector);
+        asm!("csrw stvec, a0");
+    }
 
     unsafe { memory::init() };
 
@@ -41,7 +62,7 @@ extern "C" fn kernel_main() {
     loop {
         if let Some(b) = uart::UART.lock_with(|uart| uart.poll()) {
             let c = b as char;
-            println!("got char: '{}' (0x{:02X})", c, b);
+            println!("got char: '{c}' (0x{b:02X})");
 
             match c {
                 'q' => {
@@ -55,7 +76,7 @@ extern "C" fn kernel_main() {
                 }
 
                 'p' => {
-                    println!("characters: {:?}", some_container);
+                    println!("characters: {some_container:?}");
                 }
 
                 'b' => break,

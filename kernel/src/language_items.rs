@@ -4,31 +4,32 @@
 use core::any::type_name;
 use {super::power, core::panic::PanicInfo};
 
-/// Printing function that use the UART to print to standard output.
+/// Printing function that uses the UART to print to standard output.
+pub fn print(with_newline: bool, args: ::core::fmt::Arguments) {
+    use ::core::fmt::Write;
+    crate::uart::UART.lock_with(|uart| {
+        if with_newline {
+            write!(uart, "{}\r\n", args).unwrap();
+        } else {
+            write!(uart, "{}", args).unwrap();
+        }
+    });
+}
+
+/// Printing helper that use the UART to print to standard output, with a newline.
 #[macro_export]
-macro_rules! print {
+macro_rules! println {
     ($($args:tt)+) => {{
-        use core::fmt::Write;
-        $crate::uart::UART.lock_with(|uart| {
-            let _ = write!(uart, $($args)+);
-        })
+        $crate::language_items::print(true, format_args!($($args)+));
     }};
 }
 
-/// Printing function that use the UART to print to standard output, with a newline.
+/// Printing helper that uses the UART to print to standard output.
 #[macro_export]
-macro_rules! println {
-    () => {
-        $crate::print!("\r\n")
-    };
-
-    ($fmt:expr) => {
-		$crate::print!(concat!($fmt, "\r\n"))
-	};
-
-    ($fmt:expr, $($args:tt)+) => {
-		$crate::print!(concat!($fmt, "\r\n"), $($args)+)
-	};
+macro_rules! print {
+    ($($args:tt)+) => {{
+        $crate::language_items::print(false, format_args!($($args)+));
+    }};
 }
 
 /// A wrapper around `Fn()` which can be used as a trait object,
