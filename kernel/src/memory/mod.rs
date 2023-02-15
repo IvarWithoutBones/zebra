@@ -1,5 +1,7 @@
-pub mod allocator;
-mod page;
+mod allocator;
+pub mod page;
+
+use crate::sections;
 
 const PAGE_ORDER: usize = 12;
 const PAGE_SIZE: usize = 1 << PAGE_ORDER; // 4 KiB
@@ -7,130 +9,99 @@ const PAGE_SIZE: usize = 1 << PAGE_ORDER; // 4 KiB
 // TODO: Assuming 128 MiB of memory as qemu uses that.
 const TOTAL_PAGES: usize = (128 * (1024 * 1024)) / PAGE_SIZE;
 
+pub unsafe fn init() {
+    println!("initializing allocator...");
+    allocator::init();
+    println!("allocator initialized");
+
+    println!("mapping kernel sections...");
+    map_kernel_sections();
+    println!("succesfully mapped kernel sections");
+
+    // TODO: This must be called for every hart, will need to be moved later
+    println!("starting paging...");
+    page::init();
+    println!("paging enabled");
+}
+
+unsafe fn map_kernel_sections() {
+    // TODO: move
+    const UART_ADDR: usize = 0x1000_0000;
+    const SIFIVE_TEST_REG: usize = 0x100000;
+
+    // Some funky unsafe syntax to bypass the borrow checker
+    let root_table: &mut page::Table = &mut *(page::root_table() as *mut _);
+
+    // Map all of our sections
+    root_table.identity_map(
+        sections::TEXT_START(),
+        sections::TEXT_END(),
+        page::EntryAttributes::RX as usize,
+    );
+
+    root_table.identity_map(
+        sections::RODATA_START(),
+        sections::RODATA_END(),
+        page::EntryAttributes::RX as usize,
+    );
+
+    root_table.identity_map(
+        sections::DATA_START(),
+        sections::DATA_END(),
+        page::EntryAttributes::RW as usize,
+    );
+
+    root_table.identity_map(
+        sections::BSS_START(),
+        sections::BSS_END(),
+        page::EntryAttributes::RW as usize,
+    );
+
+    root_table.identity_map(
+        sections::STACK_START(),
+        sections::STACK_END(),
+        page::EntryAttributes::RW as usize,
+    );
+
+    root_table.identity_map(
+        sections::HEAP_START(),
+        sections::HEAP_END(),
+        page::EntryAttributes::RW as usize,
+    );
+
+    root_table.kernel_map(UART_ADDR, UART_ADDR, page::EntryAttributes::RW as usize);
+
+    root_table.kernel_map(
+        SIFIVE_TEST_REG,
+        SIFIVE_TEST_REG,
+        page::EntryAttributes::RW as usize,
+    );
+}
+
 /// Align an address to upper bound according to specified order.
-pub const fn align_up(val: usize, order: usize) -> usize {
+const fn align_up(val: usize, order: usize) -> usize {
     let o = (1 << order) - 1;
     (val + o) & !o
 }
 
 /// Align an address to lower bound according to specified order.
-pub const fn align_down(val: usize, order: usize) -> usize {
+const fn align_down(val: usize, order: usize) -> usize {
     val & !((1 << order) - 1)
 }
 
 /// Align an address to the end of a page.
-pub const fn align_page_up(val: usize) -> usize {
+const fn align_page_up(val: usize) -> usize {
     align_up(val, PAGE_ORDER)
 }
 
 /// Align an address to the begin of a page.
-pub const fn align_page_down(val: usize) -> usize {
+const fn align_page_down(val: usize) -> usize {
     align_down(val, PAGE_ORDER)
-}
-
-/// Helpers to access symbols defined in the linker script (`link.ld`).
-#[allow(non_snake_case)]
-mod symbols {
-    extern "C" {
-        static _heap_start: usize;
-        static _heap_size: usize; // TODO: inconsistent
-
-        static _text_start: usize;
-        static _text_end: usize;
-
-        static _rodata_start: usize;
-        static _rodata_end: usize;
-
-        static _data_start: usize;
-        static _data_end: usize;
-
-        static _bss_start: usize;
-        static _bss_end: usize;
-
-        static _stack_start: usize;
-        static _stack_end: usize;
-    }
-
-    #[inline(always)]
-    pub fn HEAP_START() -> usize {
-        unsafe { &_heap_start as *const _ as _ }
-    }
-
-    #[inline(always)]
-    pub fn HEAP_END() -> usize {
-        HEAP_START() + unsafe { &_heap_size as *const _ as usize }
-    }
-
-    #[inline(always)]
-    pub fn TEXT_START() -> usize {
-        unsafe { &_text_start as *const _ as _ }
-    }
-
-    #[inline(always)]
-    pub fn TEXT_END() -> usize {
-        unsafe { &_text_end as *const _ as _ }
-    }
-
-    #[inline(always)]
-    pub fn RODATA_START() -> usize {
-        unsafe { &_rodata_start as *const _ as _ }
-    }
-
-    pub fn RODATA_END() -> usize {
-        unsafe { &_rodata_end as *const _ as _ }
-    }
-
-    #[inline(always)]
-    pub fn DATA_START() -> usize {
-        unsafe { &_data_start as *const _ as _ }
-    }
-
-    #[inline(always)]
-    pub fn DATA_END() -> usize {
-        unsafe { &_data_end as *const _ as _ }
-    }
-
-    #[inline(always)]
-    pub fn BSS_START() -> usize {
-        unsafe { &_bss_start as *const _ as _ }
-    }
-
-    #[inline(always)]
-    pub fn BSS_END() -> usize {
-        unsafe { &_bss_end as *const _ as _ }
-    }
-
-    #[inline(always)]
-    pub fn STACK_START() -> usize {
-        unsafe { &_stack_start as *const _ as _ }
-    }
-
-    #[inline(always)]
-    pub fn STACK_END() -> usize {
-        unsafe { &_stack_end as *const _ as _ }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // Unknown symbols are ignored if the functions are not used, this gives a linker error instead.
-    #[test_case]
-    fn symbols_exist() {
-        assert!(symbols::HEAP_START() > 0);
-        assert!(symbols::HEAP_END() > 0);
-        assert!(symbols::TEXT_START() > 0);
-        assert!(symbols::TEXT_END() > 0);
-        assert!(symbols::RODATA_START() > 0);
-        assert!(symbols::RODATA_END() > 0);
-        assert!(symbols::DATA_START() > 0);
-        assert!(symbols::DATA_END() > 0);
-        assert!(symbols::BSS_START() > 0);
-        assert!(symbols::BSS_END() > 0);
-        assert!(symbols::STACK_START() > 0);
-        assert!(symbols::STACK_END() > 0);
-    }
 
     #[test_case]
     fn page_align_up() {

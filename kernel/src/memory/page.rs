@@ -1,8 +1,14 @@
 use {
     super::{align_page_down, align_page_up, PAGE_SIZE},
     alloc::boxed::Box,
-    core::ptr::read_volatile,
+    core::{arch::asm, ptr::read_volatile},
 };
+
+static KERNEL_PAGE_TABLE: Table = Table::new();
+
+pub fn root_table() -> *const Table {
+    &KERNEL_PAGE_TABLE as _
+}
 
 const TABLE_LEN: usize = 512;
 
@@ -135,4 +141,14 @@ impl Table {
     }
 }
 
-pub static KERNEL_PAGE_TABLE: Table = Table::new();
+pub fn init() {
+    let satp = {
+        let mode = 8; // Sv39
+        (root_table() as usize / PAGE_SIZE) | (mode << 60)
+    };
+
+    unsafe {
+        // NOTE: `sfence.vma` is not required, the TLB will be freshly populated on the next memory access
+        asm!("csrw satp, {}", in(reg) satp);
+    }
+}

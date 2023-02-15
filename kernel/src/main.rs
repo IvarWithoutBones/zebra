@@ -10,6 +10,7 @@ extern crate alloc;
 mod language_items;
 mod memory;
 mod power;
+mod sections;
 mod spinlock;
 mod uart;
 
@@ -28,9 +29,7 @@ extern "C" fn kernel_main() {
     uart::UART.lock_with(|uart| uart.init());
     println!("kernel_main() called, we have reached Rust!");
 
-    unsafe {
-        memory::allocator::init();
-    };
+    unsafe { memory::init() };
 
     // Start executing the reexported test harness's entry point.
     // This will shut down the system when testing is complete.
