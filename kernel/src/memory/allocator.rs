@@ -1,6 +1,6 @@
 use {
-    super::{align_page_up, PAGE_SIZE, TOTAL_PAGES},
-    crate::{sections, spinlock::Spinlock},
+    super::{align_page_up, sections, PAGE_SIZE, TOTAL_PAGES},
+    crate::spinlock::Spinlock,
     core::{
         alloc::{GlobalAlloc, Layout},
         ptr,

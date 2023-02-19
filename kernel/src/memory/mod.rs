@@ -1,7 +1,8 @@
 mod allocator;
-pub mod page;
+mod page;
+mod sections;
 
-use crate::sections;
+use crate::plic;
 
 const PAGE_ORDER: usize = 12;
 const PAGE_SIZE: usize = 1 << PAGE_ORDER; // 4 KiB
@@ -66,6 +67,14 @@ unsafe fn map_kernel_sections() {
     root_table.identity_map(
         sections::HEAP_START(),
         sections::HEAP_END(),
+        page::EntryAttributes::RW as usize,
+    );
+
+    // TODO: move
+
+    root_table.identity_map(
+        plic::BASE_ADDR,
+        plic::BASE_ADDR + 0x400000,
         page::EntryAttributes::RW as usize,
     );
 

@@ -26,13 +26,14 @@ clear_bss_loop:
 	la sp, _stack_end
 
     # Set a Machine trap handler. This should never be called as we delegate all traps to user mode.
-    # In the odd scenario that it is called, we will print the cause and panic the kernel.
-    la t0, m_trap_vector
+    # In the odd case it is we will panic the kernel.
+    la t0, machine_trap_vector
     csrw mtvec, t0
 
     # Delegate all traps to Supervisor
     li t0, 0xffffffffffffff
     csrw medeleg, t0
+    csrw mideleg, t0
 
     # Set the Machine Previous Privilege mode to Supervisor, this will apply once we call `mret`
     li t0, 1 << 11

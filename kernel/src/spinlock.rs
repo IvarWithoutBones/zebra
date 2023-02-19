@@ -1,5 +1,7 @@
 use core::{
+    arch::asm,
     cell::UnsafeCell,
+    hint::spin_loop,
     marker::{Send, Sync},
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicBool, Ordering},
@@ -22,14 +24,24 @@ impl<T> Spinlock<T> {
     }
 
     pub fn lock(&self) -> SpinlockGuard<T> {
+        // Disable interrupts
+        unsafe {
+            let sstatus = {
+                let sstatus: usize;
+                asm!("csrr {}, sstatus", out(reg) sstatus);
+                sstatus
+            };
+            asm!("csrw sstatus, {}", in(reg) sstatus & !(1 << 1));
+        }
+
         while self
             .locked
-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::SeqCst)
             .is_err()
         {
-            // spin
+            spin_loop();
         }
-        // TODO: should disable interrupts
+
         SpinlockGuard { lock: self }
     }
 
@@ -63,5 +75,15 @@ impl<'a, T> DerefMut for SpinlockGuard<'a, T> {
 impl<'a, T> Drop for SpinlockGuard<'a, T> {
     fn drop(&mut self) {
         self.lock.locked.store(false, Ordering::Release);
+
+        // Enable interrupts
+        unsafe {
+            let sstatus = {
+                let sstatus: usize;
+                asm!("csrr {}, sstatus", out(reg) sstatus);
+                sstatus
+            };
+            asm!("csrw sstatus, {}", in(reg) sstatus | 1 << 1);
+        }
     }
 }
