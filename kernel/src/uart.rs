@@ -4,7 +4,9 @@ use {
 };
 
 // See device-trees/qemu-virt.dts
-pub static UART: Spinlock<NS16550a<0x1000_0000>> = Spinlock::new(NS16550a::new());
+pub const BASE_ADDR: usize = 0x1000_0000;
+pub const IRQ_ID: usize = 10;
+pub static UART: Spinlock<NS16550a<BASE_ADDR>> = Spinlock::new(NS16550a::new());
 
 trait UartRegister {
     fn ptr_offset() -> usize;

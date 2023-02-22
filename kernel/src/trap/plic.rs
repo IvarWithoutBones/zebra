@@ -1,12 +1,10 @@
 #![allow(dead_code)]
 
 use {
+    crate::uart,
     arbitrary_int::{u10, u3},
-    core::arch::asm,
 };
 
-// TODO: move?
-const UART_IRQ_ID: usize = 10;
 pub const BASE_ADDR: usize = 0x0c00_0000;
 
 #[repr(usize)]
@@ -59,17 +57,8 @@ fn enable(interrupt_id: u10) {
 }
 
 pub unsafe fn init() {
-    let uart_id = u10::new(UART_IRQ_ID as _);
+    let uart_id = u10::new(uart::IRQ_ID as _);
     set_threshold(u3::new(0));
     set_priority(uart_id, u3::new(1));
     enable(uart_id);
-
-    // Enable interrupts
-    let sstatus = {
-        let sstatus: usize;
-        asm!("csrr {}, sstatus", out(reg) sstatus);
-        sstatus
-    };
-    asm!("csrw sstatus, {}", in(reg) sstatus | 1 << 1);
-    asm!("csrw sie, {}", in(reg) 1 << 9);
 }

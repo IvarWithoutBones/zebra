@@ -2,7 +2,7 @@ mod allocator;
 mod page;
 mod sections;
 
-use crate::plic;
+use crate::{power, trap::plic, uart};
 
 const PAGE_ORDER: usize = 12;
 const PAGE_SIZE: usize = 1 << PAGE_ORDER; // 4 KiB
@@ -26,10 +26,6 @@ pub unsafe fn init() {
 }
 
 unsafe fn map_kernel_sections() {
-    // TODO: move
-    const UART_ADDR: usize = 0x1000_0000;
-    const SIFIVE_TEST_REG: usize = 0x100000;
-
     // Some funky unsafe syntax to bypass the borrow checker
     let root_table: &mut page::Table = &mut *(page::root_table() as *mut _);
 
@@ -70,7 +66,7 @@ unsafe fn map_kernel_sections() {
         page::EntryAttributes::RW as usize,
     );
 
-    // TODO: move
+    // Map the peripherals devices. TODO: Could be prettier.
 
     root_table.identity_map(
         plic::BASE_ADDR,
@@ -78,11 +74,15 @@ unsafe fn map_kernel_sections() {
         page::EntryAttributes::RW as usize,
     );
 
-    root_table.kernel_map(UART_ADDR, UART_ADDR, page::EntryAttributes::RW as usize);
+    root_table.kernel_map(
+        uart::BASE_ADDR,
+        uart::BASE_ADDR,
+        page::EntryAttributes::RW as usize,
+    );
 
     root_table.kernel_map(
-        SIFIVE_TEST_REG,
-        SIFIVE_TEST_REG,
+        power::BASE_ADDR,
+        power::BASE_ADDR,
         page::EntryAttributes::RW as usize,
     );
 }

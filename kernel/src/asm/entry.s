@@ -25,8 +25,7 @@ clear_bss_loop:
     # Initialize the stack, assuming one hart
 	la sp, _stack_end
 
-    # Set a Machine trap handler. This should never be called as we delegate all traps to user mode.
-    # In the odd case it is we will panic the kernel.
+    # Set a Machine trap vector, see `trap.rs` for more information.
     la t0, machine_trap_vector
     csrw mtvec, t0
 

@@ -1,9 +1,8 @@
 use core::arch::asm;
 
 // See device-trees/qemu-virt.lds
-const SIFIVE_TEST_REG: *mut u8 = 0x100000 as _;
+pub const BASE_ADDR: usize = 0x100000;
 
-// https://github.com/qemu/qemu/blob/e38d3c5ce5f6e69cf0d87a484d556be0d737d83d/include/hw/misc/sifive_test.h#L39
 const NON_ZERO_FLAG: u32 = 0x3333;
 const SUCCESS: u32 = 0x5555;
 const REBOOT: u32 = 0x7777;
@@ -48,7 +47,7 @@ impl Into<u32> for ExitType {
 pub fn shutdown(exit_type: ExitType) -> ! {
     let exit_code: u32 = exit_type.into();
     unsafe {
-        asm!("sw {code}, 0({ptr})", code = in(reg) exit_code, ptr = in(reg) SIFIVE_TEST_REG);
+        asm!("sw {}, 0({})", in(reg) exit_code, in(reg) BASE_ADDR as *mut u8);
         loop {
             // We should never reach this if the board is sifive_test compliant, but just in case
             asm!("wfi", options(noreturn, nomem, nostack))
