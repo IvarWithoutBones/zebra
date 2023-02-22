@@ -1,6 +1,10 @@
 use {
+    crate::power,
     bitbybit::{bitenum, bitfield},
-    {super::spinlock::Spinlock, core::fmt},
+    {
+        super::spinlock::Spinlock,
+        core::fmt::{self, Write},
+    },
 };
 
 // See device-trees/qemu-virt.dts
@@ -133,4 +137,27 @@ impl<const BASE_ADDR: usize> fmt::Write for NS16550a<BASE_ADDR> {
         }
         Ok(())
     }
+}
+
+pub fn interrupt() {
+    UART.lock_with(|uart| {
+        while let Some(byte) = uart.poll() {
+            let c = byte as char;
+            write!(uart, "got char: '{c}' ({byte:#02x})\n").unwrap();
+
+            match c {
+                'q' => {
+                    write!(uart, "shutting down\n").unwrap();
+                    power::shutdown(power::ExitType::Success);
+                }
+
+                'r' => {
+                    write!(uart, "rebooting\n").unwrap();
+                    power::shutdown(power::ExitType::Reboot);
+                }
+
+                _ => {}
+            }
+        }
+    });
 }

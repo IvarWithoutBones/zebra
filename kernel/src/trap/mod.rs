@@ -1,6 +1,6 @@
 pub mod plic;
 
-use {crate::memory::page, core::arch::asm};
+use {crate::uart, core::arch::asm};
 
 pub unsafe fn init() {
     // Set the Supervisor trap handler defined in `switch.s`, which will execute
@@ -27,18 +27,36 @@ pub unsafe fn enable_interrupts() {
 
 #[derive(Debug, PartialEq, Eq)]
 enum Interrupt {
-    SupervisorSoftware = 1,
-    SupervisorTimer = 5,
-    SupervisorExternal = 9,
+    SupervisorSoftware,
+    SupervisorTimer,
+    SupervisorExternal,
+}
+
+impl Interrupt {
+    fn handle(&self) {
+        match self {
+            Self::SupervisorExternal => {
+                if let Some(intr) = plic::claim() {
+                    match intr as usize {
+                        uart::IRQ_ID => uart::interrupt(),
+                        _ => println!("unhandled interrupt: {:?}", intr),
+                    }
+
+                    plic::complete(intr);
+                }
+            }
+            _ => panic!("unhandled interrupt: {:?}", self),
+        }
+    }
 }
 
 impl From<usize> for Interrupt {
-    fn from(cause: usize) -> Self {
-        match cause {
+    fn from(code: usize) -> Self {
+        match code {
             1 => Interrupt::SupervisorSoftware,
             5 => Interrupt::SupervisorTimer,
             9 => Interrupt::SupervisorExternal,
-            _ => unreachable!("invalid interrupt value: {}", cause),
+            _ => unreachable!("invalid interrupt code: {code}"),
         }
     }
 }
@@ -60,9 +78,25 @@ enum Exception {
     StoreAmoPageFault,
 }
 
+impl Exception {
+    fn handle(&self) {
+        match self {
+            _ => {
+                let stval = unsafe {
+                    let value: usize;
+                    asm!("csrr {}, stval", lateout(reg) value);
+                    value
+                };
+
+                panic!("unhandled exception: {:?} (stval={stval:#x})", self);
+            }
+        }
+    }
+}
+
 impl From<usize> for Exception {
-    fn from(cause: usize) -> Self {
-        match cause {
+    fn from(code: usize) -> Self {
+        match code {
             0 => Self::InstructionAddressMisaligned,
             1 => Self::InstructionAccessFault,
             2 => Self::IllegalInstruction,
@@ -76,7 +110,7 @@ impl From<usize> for Exception {
             12 => Self::InstructionPageFault,
             13 => Self::LoadPageFault,
             15 => Self::StoreAmoPageFault,
-            _ => unreachable!("invalid exception value: {}", cause),
+            _ => unreachable!("invalid exception code: {code}"),
         }
     }
 }
@@ -88,13 +122,21 @@ enum Trap {
 }
 
 impl Trap {
-    const fn is_interrupt(trap_cause: usize) -> bool {
-        // The highest bit denotes whether the trap is an interrupt or an exception.
-        (trap_cause & (1 << (usize::BITS - 1))) != 0
+    fn handle(&self) {
+        match self {
+            Self::Interrupt(intr) => intr.handle(),
+            Self::Exception(excp) => excp.handle(),
+        }
     }
 
-    const fn code(trap_cause: usize) -> usize {
-        trap_cause & ((1 << (usize::BITS - 1)) - 1)
+    const fn is_interrupt(cause: usize) -> bool {
+        // The highest bit denotes whether the trap is an interrupt or an exception.
+        (cause & (1 << (usize::BITS - 1))) != 0
+    }
+
+    const fn code(cause: usize) -> usize {
+        // Mask off the identifier bit
+        cause & ((1 << (usize::BITS - 1)) - 1)
     }
 }
 
@@ -120,33 +162,7 @@ extern "C" fn supervisor_trap_handler() {
         cause
     };
 
-    let value = unsafe {
-        let value: usize;
-        asm!("csrr {}, stval", lateout(reg) value);
-        value
-    };
-
-    let trap = Trap::from(cause);
-
-    if let Trap::Interrupt(ref intr) = trap {
-        match *intr {
-            Interrupt::SupervisorExternal => {
-                // This reads PLIC context 1, which for some reason seems to suffice for the interrupt claiming process?
-                // The PLIC will continue to send interrupts to the CPU until the interrupt is acknowledged, which will
-                // cause the trap handler to be called in a loop, eventually overflowing the stack.
-                unsafe { ((0x0c00_0000 + 0x201004) as *mut u32).read_volatile() };
-            }
-
-            _ => panic!("unhandled interrupt: {:?}", intr),
-        }
-    } else if let Trap::Exception(ref excp) = trap {
-        if let Some(paddr) = unsafe { (*page::root_table()).physical_addr_of(value) } {
-            println!("trap {excp:?}: stval={value:#x} paddr={paddr:#x}");
-            return;
-        };
-    }
-
-    println!("trap {trap:?}: stval={value:#x}");
+    Trap::from(cause).handle();
 }
 
 /// The trap vector for Machine mode. This should never be called as

@@ -14,7 +14,7 @@ mod uart;
 
 extern crate alloc;
 
-use core::arch::global_asm;
+use core::arch::{asm, global_asm};
 
 global_asm!(include_str!("./asm/entry.s"));
 global_asm!(include_str!("./asm/switch.s"));
@@ -35,36 +35,9 @@ extern "C" fn kernel_main() {
     #[cfg(test)]
     test_entry_point();
 
-    let mut some_container = alloc::vec::Vec::new();
-
     loop {
-        if let Some(b) = uart::UART.lock_with(|uart| uart.poll()) {
-            let c = b as char;
-            println!("got char: '{c}' (0x{b:02X})");
-
-            match c {
-                'q' => {
-                    println!("shutting down");
-                    power::shutdown(power::ExitType::Success);
-                }
-
-                'r' => {
-                    println!("rebooting");
-                    power::shutdown(power::ExitType::Reboot);
-                }
-
-                'p' => {
-                    println!("characters: {some_container:?}");
-                }
-
-                'b' => break,
-
-                _ => some_container.push(c),
-            }
-        }
+        unsafe { asm!("wfi") }
     }
-
-    panic!("intended panic because we shutdown technology is for fools");
 }
 
 #[cfg(test)]

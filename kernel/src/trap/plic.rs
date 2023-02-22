@@ -7,10 +7,18 @@ use {
 
 pub const BASE_ADDR: usize = 0x0c00_0000;
 
+pub unsafe fn init() {
+    let uart_id = u10::new(uart::IRQ_ID as _);
+    set_threshold(u3::new(0));
+    set_priority(uart_id, u3::new(1));
+    enable(uart_id);
+}
+
 #[repr(usize)]
 pub enum Registers {
     SupervisorEnable = 0x2080,
     SupervisorPriority = 0x201000,
+    SupervisorClaim = 0x201004,
 }
 
 impl Registers {
@@ -39,8 +47,6 @@ fn set_priority(interrupt_id: u10, priority: u3) {
     }
 }
 
-// TODO: dont hardcode context 1
-
 /// Set the threshold for context 1
 fn set_threshold(threshold: u3) {
     unsafe {
@@ -56,9 +62,17 @@ fn enable(interrupt_id: u10) {
     }
 }
 
-pub unsafe fn init() {
-    let uart_id = u10::new(uart::IRQ_ID as _);
-    set_threshold(u3::new(0));
-    set_priority(uart_id, u3::new(1));
-    enable(uart_id);
+/// Claim the next interrupt for context 1
+pub fn claim() -> Option<u32> {
+    let id = unsafe { Registers::SupervisorClaim.read() };
+    if id != 0 {
+        Some(id)
+    } else {
+        None
+    }
+}
+
+/// Complete an interrupt for context 1. ID should come from `claim()`
+pub fn complete(id: u32) {
+    unsafe { Registers::SupervisorClaim.write(id) }
 }

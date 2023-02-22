@@ -139,26 +139,6 @@ impl Table {
             addr += PAGE_SIZE;
         }
     }
-
-    pub fn physical_addr_of(&self, mut vaddr: usize) -> Option<usize> {
-        vaddr = align_page_down(vaddr);
-
-        let vpn = VPN(vaddr);
-        let mut v = self.entries[vpn.vpn2()];
-
-        for lvl in (0..2).rev() {
-            if !v.is_valid() {
-                return None;
-            }
-
-            v = unsafe {
-                let entry: *mut Entry = read_volatile(&v.paddr() as *const _) as _;
-                *entry.add(vpn.index(lvl)).as_mut().unwrap()
-            };
-        }
-
-        Some(v.paddr())
-    }
 }
 
 pub fn init() {
