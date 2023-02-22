@@ -76,7 +76,7 @@ impl VPN {
         (self.0 >> 30) & 0x1ff
     }
 
-    const fn idx(&self, id: usize) -> usize {
+    const fn index(&self, id: usize) -> usize {
         match id {
             0 => self.vpn0(),
             1 => self.vpn1(),
@@ -123,7 +123,7 @@ impl Table {
             v = unsafe {
                 // We need volatile as this gets optimized out otherwise
                 let entry: *mut Entry = read_volatile(&v.paddr() as *const _) as _;
-                entry.add(vpn.idx(lvl)).as_mut().unwrap()
+                entry.add(vpn.index(lvl)).as_mut().unwrap()
             };
         }
 
@@ -138,6 +138,26 @@ impl Table {
             self.map_addr(addr, addr, flags, 0);
             addr += PAGE_SIZE;
         }
+    }
+
+    pub fn physical_addr_of(&self, mut vaddr: usize) -> Option<usize> {
+        vaddr = align_page_down(vaddr);
+
+        let vpn = VPN(vaddr);
+        let mut v = self.entries[vpn.vpn2()];
+
+        for lvl in (0..2).rev() {
+            if !v.is_valid() {
+                return None;
+            }
+
+            v = unsafe {
+                let entry: *mut Entry = read_volatile(&v.paddr() as *const _) as _;
+                *entry.add(vpn.index(lvl)).as_mut().unwrap()
+            };
+        }
+
+        Some(v.paddr())
     }
 }
 

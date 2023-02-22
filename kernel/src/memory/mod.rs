@@ -1,5 +1,5 @@
 mod allocator;
-mod page;
+pub mod page;
 mod sections;
 
 use crate::{power, trap::plic, uart};
@@ -20,7 +20,7 @@ pub unsafe fn init() {
     println!("succesfully mapped kernel sections");
 
     // TODO: This must be called for every hart, will need to be moved later
-    println!("starting paging...");
+    println!("enabling paging...");
     page::init();
     println!("paging enabled");
 }

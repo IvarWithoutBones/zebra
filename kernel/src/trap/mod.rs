@@ -1,6 +1,6 @@
 pub mod plic;
 
-use core::arch::asm;
+use {crate::memory::page, core::arch::asm};
 
 pub unsafe fn init() {
     // Set the Supervisor trap handler defined in `switch.s`, which will execute
@@ -8,9 +8,11 @@ pub unsafe fn init() {
     asm!("la t0, supervisor_trap_vector");
     asm!("csrw stvec, t0");
 
+    println!("initializing PLIC...");
     plic::init();
+    println!("PLIC initialized");
 
-    // Enable interrupts
+    println!("enabling interrupts...");
     let sstatus = {
         let sstatus: usize;
         asm!("csrr {}, sstatus", out(reg) sstatus);
@@ -18,6 +20,7 @@ pub unsafe fn init() {
     };
     asm!("csrw sstatus, {}", in(reg) sstatus | 1 << 1);
     asm!("csrw sie, {}", in(reg) 1 << 9);
+    println!("interrupts enabled");
 }
 
 /// The trap handler for Supervisor mode. This will be called by the respective
@@ -42,7 +45,14 @@ extern "C" fn supervisor_trap_handler() {
     // cause the trap handler to be called in a loop, eventually overflowing the stack.
     let _ = unsafe { ((0x0c00_0000 + 0x201004) as *mut u32).read_volatile() };
 
-    println!("supervisor trap: {cause} ({value:#x})");
+    if value != 0 {
+        if let Some(paddr) = unsafe { (*page::root_table()).physical_addr_of(value) } {
+            println!("supervisor trap: scause={cause} stval={value:#x} paddr={paddr:#x}");
+            return;
+        };
+    }
+
+    println!("supervisor trap: scause={cause} stval={value:#x}");
 }
 
 /// The trap vector for Machine mode. This should never be called as
