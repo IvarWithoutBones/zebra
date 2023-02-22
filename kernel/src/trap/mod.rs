@@ -7,7 +7,9 @@ pub unsafe fn init() {
     // the `supervisor_trap_handler` function. Note that the Machine trap vector is set inside of `entry.s`.
     asm!("la t0, supervisor_trap_vector");
     asm!("csrw stvec, t0");
+}
 
+pub unsafe fn init_interrupts() {
     println!("initializing PLIC...");
     plic::init();
     println!("PLIC initialized");

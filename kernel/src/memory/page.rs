@@ -24,7 +24,7 @@ pub struct Table {
     pub entries: [Entry; TABLE_LEN],
 }
 
-/// https://five-embeddev.com/riscv-isa-manual/latest/supervisor.html#sec:translation
+/// <https://five-embeddev.com/riscv-isa-manual/latest/supervisor.html#sec:translation>
 #[allow(dead_code)]
 pub enum EntryAttributes {
     Valid = 1 << 0,

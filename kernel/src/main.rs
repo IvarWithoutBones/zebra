@@ -25,8 +25,9 @@ extern "C" fn kernel_main() {
     println!("kernel_main() called, we have reached Rust!");
 
     unsafe {
-        memory::init();
         trap::init();
+        memory::init();
+        trap::init_interrupts();
     }
 
     // Start executing the reexported test harness's entry point.
