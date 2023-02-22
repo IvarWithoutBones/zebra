@@ -27,7 +27,7 @@ extern "C" fn kernel_main() {
     unsafe {
         trap::init();
         memory::init();
-        trap::init_interrupts();
+        trap::enable_interrupts();
     }
 
     // Start executing the reexported test harness's entry point.
