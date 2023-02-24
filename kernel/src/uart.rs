@@ -1,10 +1,7 @@
 use {
-    crate::power,
+    crate::{power, spinlock::Spinlock},
     bitbybit::{bitenum, bitfield},
-    {
-        super::spinlock::Spinlock,
-        core::fmt::{self, Write},
-    },
+    core::fmt::{self, Write},
 };
 
 // See device-trees/qemu-virt.dts
@@ -26,19 +23,21 @@ macro_rules! impl_uart_register {
     };
 }
 
-impl_uart_register!(Interrupt, 1);
 #[bitfield(u8, default: 0)]
 struct Interrupt {
     #[bit(0, rw)]
     enabled: bool,
 }
 
-impl_uart_register!(Fifo, 2);
+impl_uart_register!(Interrupt, 1);
+
 #[bitfield(u8, default: 0)]
 struct Fifo {
     #[bit(0, rw)]
     enabled: bool,
 }
+
+impl_uart_register!(Fifo, 2);
 
 #[allow(dead_code)]
 #[bitenum(u2, exhaustive: true)]
@@ -49,7 +48,6 @@ enum WordLength {
     Eight = 3,
 }
 
-impl_uart_register!(LineControl, 3);
 #[bitfield(u8, default: 0)]
 struct LineControl {
     #[bits(0..=1, rw)]
@@ -58,7 +56,8 @@ struct LineControl {
     parity_enable: bool,
 }
 
-impl_uart_register!(LineStatus, 5);
+impl_uart_register!(LineControl, 3);
+
 #[bitfield(u8)]
 struct LineStatus {
     #[bit(0, r)]
@@ -70,6 +69,8 @@ struct LineStatus {
     #[bit(3, r)]
     framing_error: bool,
 }
+
+impl_uart_register!(LineStatus, 5);
 
 pub struct NS16550a<const BASE_ADDR: usize> {
     interrupt: Interrupt,

@@ -1,6 +1,9 @@
 pub mod plic;
 
-use {crate::uart, core::arch::asm};
+use {
+    crate::uart,
+    core::{arch::asm, fmt::Debug},
+};
 
 pub unsafe fn init() {
     // Set the Supervisor trap handler defined in `switch.s`, which will execute
@@ -32,24 +35,6 @@ enum Interrupt {
     SupervisorExternal,
 }
 
-impl Interrupt {
-    fn handle(&self) {
-        match self {
-            Self::SupervisorExternal => {
-                if let Some(intr) = plic::claim() {
-                    match intr as usize {
-                        uart::IRQ_ID => uart::interrupt(),
-                        _ => println!("unhandled interrupt: {:?}", intr),
-                    }
-
-                    plic::complete(intr);
-                }
-            }
-            _ => panic!("unhandled interrupt: {:?}", self),
-        }
-    }
-}
-
 impl From<usize> for Interrupt {
     fn from(code: usize) -> Self {
         match code {
@@ -57,6 +42,25 @@ impl From<usize> for Interrupt {
             5 => Interrupt::SupervisorTimer,
             9 => Interrupt::SupervisorExternal,
             _ => unreachable!("invalid interrupt code: {code}"),
+        }
+    }
+}
+
+impl Interrupt {
+    fn handle(&self) {
+        match self {
+            Self::SupervisorExternal => {
+                if let Some(intr) = plic::claim() {
+                    match intr as usize {
+                        uart::IRQ_ID => uart::interrupt(),
+                        _ => panic!("unhandled external interrupt: {intr}"),
+                    }
+
+                    plic::complete(intr);
+                }
+            }
+
+            _ => panic!("unhandled interrupt: {self:?}"),
         }
     }
 }
@@ -78,22 +82,6 @@ enum Exception {
     StoreAmoPageFault,
 }
 
-impl Exception {
-    fn handle(&self) {
-        match self {
-            _ => {
-                let stval = unsafe {
-                    let value: usize;
-                    asm!("csrr {}, stval", lateout(reg) value);
-                    value
-                };
-
-                panic!("unhandled exception: {:?} (stval={stval:#x})", self);
-            }
-        }
-    }
-}
-
 impl From<usize> for Exception {
     fn from(code: usize) -> Self {
         match code {
@@ -112,6 +100,18 @@ impl From<usize> for Exception {
             15 => Self::StoreAmoPageFault,
             _ => unreachable!("invalid exception code: {code}"),
         }
+    }
+}
+
+impl Exception {
+    fn handle(&self) {
+        let stval = unsafe {
+            let value: usize;
+            asm!("csrr {}, stval", lateout(reg) value);
+            value
+        };
+
+        panic!("unhandled exception: {self:?} (stval={stval:#x})");
     }
 }
 
