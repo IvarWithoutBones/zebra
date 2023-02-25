@@ -2,7 +2,10 @@
 
 #[cfg(test)]
 use core::any::type_name;
-use {super::power, core::panic::PanicInfo};
+use {
+    super::power,
+    core::{arch::asm, panic::PanicInfo},
+};
 
 /// Printing function that uses the UART to print to standard output.
 pub fn print(with_newline: bool, args: ::core::fmt::Arguments) {
@@ -65,6 +68,9 @@ pub fn test_runner(tests: &[&dyn Testable]) {
 /// Note that this only covers panics from Rust itself, not CPU exceptions.
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    // Disable interrupts, otherwise we might never get to shut down
+    unsafe { asm!("csrw sie, zero") }
+
     println!("{:#}", info);
     power::shutdown(power::ExitType::Failure)
 }

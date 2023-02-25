@@ -1,11 +1,10 @@
 .global supervisor_trap_vector
-.align 16
+.align 4
 supervisor_trap_vector:
     # Make room for all our registers on the stack
     addi sp, sp, -256
 
     # Save all our registers except the thread pointer as we might switch HARTs in the middle of a trap.
-    # TODO: do we need to save floating-pointer registers?
     sd ra, 0(sp)
     sd sp, 8(sp)
     sd gp, 16(sp)
@@ -77,3 +76,44 @@ supervisor_trap_vector:
 
     # Return to the point of execution prior to the trap
     sret
+
+.global machine_timer_vector
+.align 4
+machine_timer_vector:
+    # Save the registers we will use
+    addi sp, sp, -32
+    sd a0, 0(sp)
+    sd a1, 8(sp)
+    sd a2, 16(sp)
+    sd a3, 24(sp)
+
+    # Load the context from `clint.rs`, matching the layout defined there:
+    #   0: `mtime` pointer
+    #   1: `mtimecmp` pointer
+    #   2: `mtimecmp` interval
+    csrrw a0, mscratch, a0
+
+    # Schedule the next interrupt
+    ld a1, 8(a0) # Pointer to mtimecmp
+    ld a3, 0(a1) # Dereference the mtimecmp pointer
+    ld a2, 16(a0) # Load the interval
+
+    # Add the new interval to mtimecmp
+    add a3, a3, a2
+    sd a3, 0(a1)
+
+    # Save the context
+    csrrw a0, mscratch, a0
+
+    # Raise a supervisor software interrupt
+    csrsi sip, 2
+
+    # Restore the registers we used
+    ld a0, 0(sp)
+    ld a1, 8(sp)
+    ld a2, 16(sp)
+    ld a3, 24(sp)
+    addi sp, sp, 32
+
+    # Hand control back to the kernel
+    mret

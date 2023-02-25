@@ -25,14 +25,13 @@ clear_bss_loop:
     # Initialize the stack, assuming one hart
 	la sp, _stack_end
 
-    # Set a Machine trap vector, see `trap.rs` for more information.
-    la t0, machine_trap_vector
-    csrw mtvec, t0
-
     # Delegate all traps to Supervisor
     li t0, 0xffffffffffffff
     csrw medeleg, t0
     csrw mideleg, t0
+
+    # Initialize timer interrupts
+    call machine_timer_init
 
     # Set the Machine Previous Privilege mode to Supervisor, this will apply once we call `mret`
     li t0, 1 << 11

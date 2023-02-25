@@ -22,7 +22,6 @@ global_asm!(include_str!("./asm/switch.s"));
 #[no_mangle]
 extern "C" fn kernel_main() {
     uart::UART.lock_with(|uart| uart.init());
-    println!("kernel_main() called, we have reached Rust!");
 
     unsafe {
         trap::init();

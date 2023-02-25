@@ -1,3 +1,4 @@
+mod clint;
 pub mod plic;
 
 use {
@@ -5,11 +6,14 @@ use {
     core::{arch::asm, fmt::Debug},
 };
 
+extern "C" {
+    // Trap handler defined in `switch.s`
+    fn supervisor_trap_vector();
+}
+
 pub unsafe fn init() {
-    // Set the Supervisor trap handler defined in `switch.s`, which will execute
-    // the `supervisor_trap_handler` function. Note that the Machine trap vector is set inside of `entry.s`.
-    asm!("la t0, supervisor_trap_vector");
-    asm!("csrw stvec, t0");
+    // Set the supervisor trap handler defined in `switch.s`, which will execute the handler below
+    asm!("csrw stvec, {}", in(reg) supervisor_trap_vector as usize);
 }
 
 pub unsafe fn enable_interrupts() {
@@ -18,13 +22,12 @@ pub unsafe fn enable_interrupts() {
     println!("PLIC initialized");
 
     println!("enabling interrupts...");
-    let sstatus = {
-        let sstatus: usize;
-        asm!("csrr {}, sstatus", out(reg) sstatus);
-        sstatus
-    };
-    asm!("csrw sstatus, {}", in(reg) sstatus | 1 << 1);
-    asm!("csrw sie, {}", in(reg) 1 << 9);
+
+    // Set the interrupt enable bit
+    asm!("csrs sstatus, {}", in(reg) 1 << 1);
+    // Enable external, timer, and software interrupts
+    asm!("csrs sie, {}", in(reg) 1 << 9 | 1 << 5 | 1 << 1);
+
     println!("interrupts enabled");
 }
 
@@ -58,6 +61,12 @@ impl Interrupt {
 
                     plic::complete(intr);
                 }
+            }
+
+            Self::SupervisorSoftware => {
+                // Clear the interrupt pending bit
+                unsafe { asm!("csrc sip, 2") }
+                println!("timer interrupt");
             }
 
             _ => panic!("unhandled interrupt: {self:?}"),
@@ -163,25 +172,4 @@ extern "C" fn supervisor_trap_handler() {
     };
 
     Trap::from(cause).handle();
-}
-
-/// The trap vector for Machine mode. This should never be called as
-/// all traps are delegated to Supervisor mode, the exception being
-/// faults during the boot process (inside `entry.s`).
-#[no_mangle]
-#[repr(align(16))]
-extern "C" fn machine_trap_vector() {
-    let cause = unsafe {
-        let cause: usize;
-        asm!("csrr {}, mcause", lateout(reg) cause);
-        cause
-    };
-
-    let value = unsafe {
-        let value: usize;
-        asm!("csrr {}, mtval", lateout(reg) value);
-        value
-    };
-
-    unreachable!("machine trap: {cause} ({value:#x})");
 }

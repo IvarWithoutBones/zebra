@@ -26,15 +26,15 @@ impl Registers {
         (BASE_ADDR + (self as usize)) as _
     }
 
-    pub unsafe fn read(self) -> u32 {
-        self.as_ptr().read_volatile()
+    fn read(self) -> u32 {
+        unsafe { self.as_ptr().read_volatile() }
     }
 
-    unsafe fn write<T>(self, value: T)
+    fn write<T>(self, value: T)
     where
         T: Into<u32>,
     {
-        self.as_ptr().write_volatile(value.into())
+        unsafe { self.as_ptr().write_volatile(value.into()) }
     }
 }
 
@@ -49,22 +49,18 @@ fn set_priority(interrupt_id: u10, priority: u3) {
 
 /// Set the threshold for context 1
 fn set_threshold(threshold: u3) {
-    unsafe {
-        Registers::SupervisorPriority.write(threshold);
-    }
+    Registers::SupervisorPriority.write(threshold);
 }
 
 /// Set the enable bit for the given interrupt ID on context 1
 fn enable(interrupt_id: u10) {
     let id: u32 = 1 << interrupt_id.value();
-    unsafe {
-        Registers::SupervisorEnable.write(id);
-    }
+    Registers::SupervisorEnable.write(id);
 }
 
 /// Claim the next interrupt for context 1
 pub fn claim() -> Option<u32> {
-    let id = unsafe { Registers::SupervisorClaim.read() };
+    let id = Registers::SupervisorClaim.read();
     if id != 0 {
         Some(id)
     } else {
@@ -74,5 +70,5 @@ pub fn claim() -> Option<u32> {
 
 /// Complete an interrupt for context 1. ID should come from `claim()`
 pub fn complete(id: u32) {
-    unsafe { Registers::SupervisorClaim.write(id) }
+    Registers::SupervisorClaim.write(id)
 }
