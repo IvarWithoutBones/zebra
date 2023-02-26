@@ -6,14 +6,14 @@ const BASE_ADDR: usize = 0x0200_0000;
 const MTIME: usize = BASE_ADDR + 0xBFF8;
 const MTIMECMP: usize = BASE_ADDR + 0x4000;
 
-/// Information saved between traps, assuming one HART. Layout must match `switch.s`.
+/// Information saved between traps, assuming one HART. Layout must match `vector.s`.
 ///     0: `mtime` pointer
 ///     1: `mtimecmp` pointer
 ///     2: `mtimecmp` interval
 static mut MSCRATCH: [u64; 3] = [0; 3];
 
 extern "C" {
-    // Trap handler defined in `switch.s`
+    // Trap handler defined in `vector.s`
     fn machine_timer_vector();
 }
 

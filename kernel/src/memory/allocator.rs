@@ -8,7 +8,7 @@ use {
 };
 
 #[global_allocator]
-static ALLOCATOR: Spinlock<Allocator> = Spinlock::new(Allocator::new());
+pub static ALLOCATOR: Spinlock<Allocator> = Spinlock::new(Allocator::new());
 
 unsafe impl GlobalAlloc for Spinlock<Allocator> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -22,7 +22,7 @@ unsafe impl GlobalAlloc for Spinlock<Allocator> {
     }
 }
 
-struct Allocator {
+pub struct Allocator {
     /// Keeps track of which pages are free.
     pages: [usize; TOTAL_PAGES],
     /// The base address of the heap.
@@ -50,7 +50,7 @@ impl Allocator {
         (ptr as usize - self.base_addr) / PAGE_SIZE
     }
 
-    fn allocate(&mut self, size: usize) -> Option<*mut u8> {
+    pub fn allocate(&mut self, size: usize) -> Option<*mut u8> {
         let pages_needed = align_page_up(size) / PAGE_SIZE;
         for i in 0..TOTAL_PAGES {
             if self.pages[i] != 0 {
@@ -60,7 +60,7 @@ impl Allocator {
             // Check if the gap is big enough
             let mut found = true;
             for j in 0..pages_needed {
-                if self.pages[i + j] != 0 {
+                if *self.pages.get(i + j)? != 0 {
                     found = false;
                     break;
                 }
@@ -68,7 +68,6 @@ impl Allocator {
 
             if found {
                 for j in 0..pages_needed {
-                    // TODO: would `pages_needed - j` make more sense?
                     self.pages[i + j] = pages_needed;
                 }
 

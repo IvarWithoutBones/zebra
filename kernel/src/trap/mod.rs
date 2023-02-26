@@ -2,17 +2,22 @@ mod clint;
 pub mod plic;
 
 use {
-    crate::uart,
-    core::{arch::asm, fmt::Debug},
+    crate::{memory::page, uart},
+    core::{
+        arch::{asm, global_asm},
+        fmt::Debug,
+    },
 };
 
+global_asm!(include_str!("./vector.s"));
+
 extern "C" {
-    // Trap handler defined in `switch.s`
+    // Trap handler defined in `vector.s`
     fn supervisor_trap_vector();
 }
 
 pub unsafe fn init() {
-    // Set the supervisor trap handler defined in `switch.s`, which will execute the handler below
+    // Set the supervisor trap handler defined in `vector.s`, which will execute the Rust handler below
     asm!("csrw stvec, {}", in(reg) supervisor_trap_vector as usize);
 }
 
@@ -120,7 +125,23 @@ impl Exception {
             value
         };
 
-        panic!("unhandled exception: {self:?} (stval={stval:#x})");
+        if stval != 0 {
+            let sepc = unsafe {
+                let value: usize;
+                asm!("csrr {}, sepc", lateout(reg) value);
+                value
+            };
+
+            if let Some(paddr) = unsafe { (*page::root_table()).physical_addr(sepc) } {
+                panic!(
+                    "unhandled exception: {self:?}, stval={stval:#x}, physical address={paddr:#x}"
+                );
+            } else {
+                panic!("unhandled exception: {self:?}, stval={stval:#x}");
+            }
+        }
+
+        panic!("unhandled exception: {self:?}");
     }
 }
 
@@ -165,6 +186,18 @@ impl From<usize> for Trap {
 /// return from this function we will restore and resume the previous execution context.
 #[no_mangle]
 extern "C" fn supervisor_trap_handler() {
+    let sepc = unsafe {
+        let value: usize;
+        asm!("csrr {}, sepc", lateout(reg) value);
+        value
+    };
+
+    let sstatus = unsafe {
+        let value: usize;
+        asm!("csrr {}, sstatus", lateout(reg) value);
+        value
+    };
+
     let cause = unsafe {
         let cause: usize;
         asm!("csrr {}, scause", lateout(reg) cause);
@@ -172,4 +205,9 @@ extern "C" fn supervisor_trap_handler() {
     };
 
     Trap::from(cause).handle();
+
+    unsafe {
+        asm!("csrw sepc, {}", in(reg) sepc);
+        asm!("csrw sstatus, {}", in(reg) sstatus);
+    }
 }

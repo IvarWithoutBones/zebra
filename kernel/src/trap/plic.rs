@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use {
     crate::uart,
     arbitrary_int::{u10, u3},

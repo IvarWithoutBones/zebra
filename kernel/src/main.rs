@@ -8,6 +8,7 @@
 mod language_items;
 mod memory;
 mod power;
+mod process;
 mod spinlock;
 mod trap;
 mod uart;
@@ -17,7 +18,6 @@ extern crate alloc;
 use core::arch::{asm, global_asm};
 
 global_asm!(include_str!("./asm/entry.s"));
-global_asm!(include_str!("./asm/switch.s"));
 
 #[no_mangle]
 extern "C" fn kernel_main() {

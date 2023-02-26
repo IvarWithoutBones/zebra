@@ -2,13 +2,17 @@ mod allocator;
 pub mod page;
 mod sections;
 
-use crate::{power, trap::plic, uart};
+use crate::{power, spinlock::SpinlockGuard, trap::plic, uart};
 
 const PAGE_ORDER: usize = 12;
 const PAGE_SIZE: usize = 1 << PAGE_ORDER; // 4 KiB
 
 // TODO: Assuming 128 MiB of memory as qemu uses that.
 const TOTAL_PAGES: usize = (128 * (1024 * 1024)) / PAGE_SIZE;
+
+pub fn allocator() -> SpinlockGuard<'static, allocator::Allocator> {
+    allocator::ALLOCATOR.lock()
+}
 
 pub unsafe fn init() {
     println!("initializing allocator...");
@@ -33,37 +37,37 @@ unsafe fn map_kernel_sections() {
     root_table.identity_map(
         sections::TEXT_START(),
         sections::TEXT_END(),
-        page::EntryAttributes::RX as usize,
+        page::EntryAttributes::ReadExecute as usize,
     );
 
     root_table.identity_map(
         sections::RODATA_START(),
         sections::RODATA_END(),
-        page::EntryAttributes::RX as usize,
+        page::EntryAttributes::ReadExecute as usize,
     );
 
     root_table.identity_map(
         sections::DATA_START(),
         sections::DATA_END(),
-        page::EntryAttributes::RW as usize,
+        page::EntryAttributes::ReadWrite as usize,
     );
 
     root_table.identity_map(
         sections::BSS_START(),
         sections::BSS_END(),
-        page::EntryAttributes::RW as usize,
+        page::EntryAttributes::ReadWrite as usize,
     );
 
     root_table.identity_map(
         sections::STACK_START(),
         sections::STACK_END(),
-        page::EntryAttributes::RW as usize,
+        page::EntryAttributes::ReadWrite as usize,
     );
 
     root_table.identity_map(
         sections::HEAP_START(),
         sections::HEAP_END(),
-        page::EntryAttributes::RW as usize,
+        page::EntryAttributes::ReadWrite as usize,
     );
 
     // Map the peripherals devices. TODO: Could be prettier.
@@ -71,19 +75,19 @@ unsafe fn map_kernel_sections() {
     root_table.identity_map(
         plic::BASE_ADDR,
         plic::BASE_ADDR + 0x400000,
-        page::EntryAttributes::RW as usize,
+        page::EntryAttributes::ReadWrite as usize,
     );
 
     root_table.kernel_map(
         uart::BASE_ADDR,
         uart::BASE_ADDR,
-        page::EntryAttributes::RW as usize,
+        page::EntryAttributes::ReadWrite as usize,
     );
 
     root_table.kernel_map(
         power::BASE_ADDR,
         power::BASE_ADDR,
-        page::EntryAttributes::RW as usize,
+        page::EntryAttributes::ReadWrite as usize,
     );
 }
 

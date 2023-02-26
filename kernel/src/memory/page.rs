@@ -12,13 +12,14 @@ pub fn root_table() -> *const Table {
 
 const TABLE_LEN: usize = 512;
 
-#[derive(Copy, Clone)] // For initializer
+#[derive(Debug, Copy, Clone)] // For initializer
 #[repr(transparent)]
 pub struct Entry(usize);
 
 #[repr(transparent)]
 pub struct VPN(usize);
 
+#[derive(Debug)]
 #[repr(C, align(4096))]
 pub struct Table {
     pub entries: [Entry; TABLE_LEN],
@@ -36,11 +37,11 @@ pub enum EntryAttributes {
     Accessed = 1 << 6,
     Dirty = 1 << 7,
 
-    RW = 0b11 << 1,
-    RX = 0b101 << 1,
-    UR = 0b10010,
-    URW = 0b10110,
-    URX = 0b11010,
+    ReadWrite = 0b11 << 1,
+    ReadExecute = 0b101 << 1,
+    UserRead = 0b10010,
+    UserReadWrite = 0b10110,
+    UserReadExecute = 0b11010,
 }
 
 impl EntryAttributes {
@@ -87,7 +88,7 @@ impl VPN {
 }
 
 impl Table {
-    const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             entries: [Entry(0); TABLE_LEN],
         }
@@ -138,6 +139,27 @@ impl Table {
             self.map_addr(addr, addr, flags, 0);
             addr += PAGE_SIZE;
         }
+    }
+
+    pub fn physical_addr(&self, mut vaddr: usize) -> Option<usize> {
+        vaddr = align_page_down(vaddr);
+        let vpn = VPN(vaddr);
+        let mut v = &self.entries[vpn.vpn2()];
+
+        for lvl in (0..2).rev() {
+            if !v.is_valid() {
+                return None;
+            }
+
+            // Get the next level
+            v = unsafe {
+                // We need volatile as this gets optimized out otherwise
+                let entry: *const Entry = read_volatile(&v.paddr() as *const _) as _;
+                entry.add(vpn.index(lvl)).as_ref().unwrap()
+            };
+        }
+
+        Some(v.paddr())
     }
 }
 
