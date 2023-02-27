@@ -37,23 +37,6 @@ in
 
     zebra-runner = zebraPackages.zebra-kernel.runner;
 
-    xv6-riscv-book = callPackage ./resources/xv6-riscv-book {
-      texlive-combined = texlive.combine {
-        inherit (texlive)
-          scheme-basic
-          pdftex
-          listings
-          xcolor
-          imakeidx
-          xkeyval
-          booktabs
-          etoolbox
-          preprint
-          soul
-          metafont
-          fancyvrb
-          collection-fontsrecommended;
-      };
-    };
+    resources = callPackage ./resources { };
   };
 }
