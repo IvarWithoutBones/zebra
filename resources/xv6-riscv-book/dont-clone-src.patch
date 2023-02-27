@@ -1,0 +1,34 @@
+diff --git a/Makefile b/Makefile
+index 93f498f..c4c5f42 100644
+--- a/Makefile
++++ b/Makefile
+@@ -2,25 +2,17 @@ SRC=xv6-riscv-src/
+
+ T=latex.out
+
+-TEX=$(wildcard $(T)/*.tex)
++TEX=$(foreach file, $(SPELLTEX), $(T)/$(file))
+ SPELLTEX=$(wildcard *.tex)
+
+ all: book.pdf
+-.PHONY: all src clean
++.PHONY: all clean
+
+-$(T)/%.tex: %.tex | src
++$(T)/%.tex: %.tex
+ 	mkdir -p latex.out
+ 	./lineref $(notdir $@) $(SRC) > $@
+
+-src:
+-	if [ ! -d $(SRC) ]; then \
+-		git clone git@github.com:mit-pdos/xv6-riscv.git $(SRC) ; \
+-	else \
+-		git -C $(SRC) pull ; \
+-	fi; \
+-	true
+-
+-book.pdf: src book.tex $(TEX)
++book.pdf: book.tex $(TEX)
+ 	pdflatex book.tex
+ 	bibtex book
+ 	pdflatex book.tex
