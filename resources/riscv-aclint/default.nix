@@ -26,7 +26,7 @@ stdenvNoCC.mkDerivation rec {
   '';
 
   meta = with lib; {
-    description = "The ACLINT (Advanced Core Local Interruptor) specification";
+    description = "The RISC-V Advanced Core Local Interruptor specification";
     homepage = "https://github.com/riscv/riscv-aclint";
     license = licenses.cc-by-40;
   };

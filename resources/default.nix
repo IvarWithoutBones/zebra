@@ -6,6 +6,8 @@
 let
   riscv-aclint = callPackage ./riscv-aclint { };
 
+  riscv-plic = callPackage ./riscv-plic { };
+
   xv6-riscv-book = callPackage ./xv6-riscv-book {
     texlive-combined = texlive.combine {
       inherit (texlive)
@@ -50,6 +52,7 @@ symlinkJoin {
     xv6-riscv-book
     riscv-privileged-isa-manual
     riscv-aclint
+    riscv-plic
   ];
 
   meta.description = "A collection of resources for RISC-V operating system development";
