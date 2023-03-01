@@ -15,7 +15,10 @@ mod uart;
 
 extern crate alloc;
 
-use core::arch::{asm, global_asm};
+use {
+    arbitrary_int::u3,
+    core::arch::{asm, global_asm},
+};
 
 global_asm!(include_str!("./asm/entry.s"));
 
@@ -24,8 +27,10 @@ extern "C" fn kernel_main() {
     uart::UART.lock_with(|uart| uart.init());
 
     unsafe {
-        trap::init();
+        trap::attach_supervisor_trap_vector();
         memory::init();
+        trap::plic::set_global_threshold(u3::new(0));
+        trap::plic::add_device::<uart::NS16550a<{ uart::BASE_ADDR }>>();
         trap::enable_interrupts();
     }
 

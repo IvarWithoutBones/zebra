@@ -12,20 +12,16 @@ use {
 global_asm!(include_str!("./vector.s"));
 
 extern "C" {
-    // Trap handler defined in `vector.s`
+    // Trap vector defined in `vector.s`
     fn supervisor_trap_vector();
 }
 
-pub unsafe fn init() {
-    // Set the supervisor trap handler defined in `vector.s`, which will execute the Rust handler below
+pub unsafe fn attach_supervisor_trap_vector() {
+    // Set the supervisor trap vector defined in `vector.s`, which will execute the Rust handler below
     asm!("csrw stvec, {}", in(reg) supervisor_trap_vector as usize);
 }
 
 pub unsafe fn enable_interrupts() {
-    println!("initializing PLIC...");
-    plic::init();
-    println!("PLIC initialized");
-
     println!("enabling interrupts...");
 
     // Set the interrupt enable bit
@@ -59,6 +55,7 @@ impl Interrupt {
         match self {
             Self::SupervisorExternal => {
                 if let Some(intr) = plic::claim() {
+                    // TODO: factor this in a nicer way using InterruptDevice
                     match intr as usize {
                         uart::IRQ_ID => uart::interrupt(),
                         _ => panic!("unhandled external interrupt: {intr}"),

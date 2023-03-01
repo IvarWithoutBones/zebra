@@ -1,5 +1,5 @@
 use {
-    crate::{power, spinlock::Spinlock},
+    crate::{power, spinlock::Spinlock, trap::plic::InterruptDevice},
     bitbybit::{bitenum, bitfield},
     core::fmt::{self, Write},
 };
@@ -137,6 +137,14 @@ impl<const BASE_ADDR: usize> fmt::Write for NS16550a<BASE_ADDR> {
             self.write::<Self>(byte);
         }
         Ok(())
+    }
+}
+
+impl<const BASE_ADDR: usize> InterruptDevice for NS16550a<BASE_ADDR> {
+    const INTERRUPT_ID: arbitrary_int::u10 = arbitrary_int::u10::new(10);
+
+    fn priority() -> arbitrary_int::u3 {
+        arbitrary_int::u3::new(1)
     }
 }
 

@@ -1,15 +1,19 @@
-use {
-    crate::uart,
-    arbitrary_int::{u10, u3},
-};
+use arbitrary_int::{u10, u3};
 
 pub const BASE_ADDR: usize = 0x0c00_0000;
 
-pub unsafe fn init() {
-    let uart_id = u10::new(uart::IRQ_ID as _);
-    set_threshold(u3::new(0));
-    set_priority(uart_id, u3::new(1));
-    enable(uart_id);
+pub trait InterruptDevice {
+    const INTERRUPT_ID: u10;
+
+    fn priority() -> u3;
+}
+
+pub fn add_device<T>()
+where
+    T: InterruptDevice,
+{
+    set_priority(T::INTERRUPT_ID, T::priority());
+    enable_device(T::INTERRUPT_ID);
 }
 
 #[repr(usize)]
@@ -46,12 +50,12 @@ fn set_priority(interrupt_id: u10, priority: u3) {
 }
 
 /// Set the threshold for context 1
-fn set_threshold(threshold: u3) {
+pub fn set_global_threshold(threshold: u3) {
     Registers::SupervisorPriority.write(threshold);
 }
 
 /// Set the enable bit for the given interrupt ID on context 1
-fn enable(interrupt_id: u10) {
+fn enable_device(interrupt_id: u10) {
     let id: u32 = 1 << interrupt_id.value();
     Registers::SupervisorEnable.write(id);
 }
