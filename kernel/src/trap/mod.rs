@@ -209,3 +209,20 @@ extern "C" fn supervisor_trap_handler() {
         asm!("csrw sstatus, {}", in(reg) sstatus);
     }
 }
+
+#[no_mangle]
+extern "C" fn machine_trap_handler() {
+    let mstatus = unsafe {
+        let value: usize;
+        asm!("csrr {}, mstatus", lateout(reg) value);
+        value
+    };
+
+    let cause = unsafe {
+        let cause: usize;
+        asm!("csrr {}, mcause", lateout(reg) cause);
+        cause
+    };
+
+    panic!("unhandled machine trap: {cause:#x}, mstatus={mstatus:#x}");
+}

@@ -30,6 +30,10 @@ clear_bss_loop:
     csrw medeleg, t0
     csrw mideleg, t0
 
+    # Set the Machine trap vector
+    la t0, machine_trap_vector
+    csrw mtvec, t0
+
     # Initialize timer interrupts
     call machine_timer_init
 

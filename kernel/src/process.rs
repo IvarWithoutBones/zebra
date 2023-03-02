@@ -45,17 +45,19 @@ pub struct Process {
     state: ProcessState,
     pid: usize,
     stack: *mut u8,
-    program_counter: usize,
+    pub program_counter: usize,
     page_table: Box<page::Table>,
     trap_frame: Box<TrapFrame>,
 }
 
 impl Process {
     pub fn new(func: fn()) -> Self {
+        let stack = { allocator().allocate(STACK_SIZE).unwrap() };
+
         let mut proc = Self {
             state: ProcessState::Waiting,
             pid: 0,
-            stack: allocator().allocate(STACK_SIZE).unwrap(),
+            stack,
             program_counter: func as usize,
             page_table: Box::new(page::Table::new()),
             trap_frame: Box::new(TrapFrame::new()),
@@ -64,27 +66,18 @@ impl Process {
         // Set the stack pointer (x2)
         proc.trap_frame.registers[2] = STACK_ADDR + STACK_SIZE;
 
-        // Map the stack
-        for i in 0..STACK_SIZE {
-            proc.page_table.kernel_map(
-                STACK_ADDR + i,
-                proc.stack as usize + i,
-                page::EntryAttributes::UserReadWrite as _,
-            );
-        }
-
         // Map the program
-        proc.page_table.kernel_map(
+        proc.page_table.identity_map(
             PROGRAM_ADDR,
             func as usize,
-            page::EntryAttributes::UserReadExecute as _,
+            page::EntryAttributes::ReadExecute as _,
         );
 
         // TODO: is this the trampoline?
-        proc.page_table.kernel_map(
+        proc.page_table.identity_map(
             PROGRAM_ADDR + 0x1000,
             func as usize + 0x1000,
-            page::EntryAttributes::UserReadExecute as _,
+            page::EntryAttributes::ReadExecute as _,
         );
 
         proc

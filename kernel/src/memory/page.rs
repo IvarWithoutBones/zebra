@@ -124,9 +124,9 @@ impl Table {
     }
 
     fn map_addr(&mut self, vaddr: usize, paddr: usize, flags: usize, level: usize) {
-        assert!(paddr % PAGE_SIZE == 0);
-        assert!(vaddr % PAGE_SIZE == 0);
-        assert!(level <= 2);
+        assert!(paddr % PAGE_SIZE == 0, "physical address unaligned: {paddr:#x}");
+        assert!(vaddr % PAGE_SIZE == 0, "virtual address unaligned: {vaddr:#x}");
+        assert!(level <= 2, "invalid level: {level}");
 
         let vpn = VirtualPageNumber(vaddr);
         let mut v = &mut self.entries[vpn.vpn2()];

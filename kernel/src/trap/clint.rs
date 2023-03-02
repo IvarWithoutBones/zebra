@@ -12,11 +12,6 @@ const MTIMECMP: usize = BASE_ADDR + 0x4000;
 ///     2: `mtimecmp` interval
 static mut MSCRATCH: [u64; 3] = [0; 3];
 
-extern "C" {
-    // Trap handler defined in `vector.s`
-    fn machine_timer_vector();
-}
-
 /// Initializes the machine-mode timer. This has to be called before we enter supervisor mode.
 #[no_mangle]
 unsafe extern "C" fn machine_timer_init() {
@@ -33,9 +28,6 @@ unsafe extern "C" fn machine_timer_init() {
     MSCRATCH[1] = mtimecmp as _;
     MSCRATCH[2] = INTERVAL;
     asm!("csrw mscratch, {}", in(reg) MSCRATCH.as_mut_ptr() as usize);
-
-    // Set the machine-mode trap handler, which will trigger a supervisor interrupt
-    asm!("csrw mtvec, {}", in(reg) machine_timer_vector as usize);
 
     // Enable machine interrupts
     asm!("csrs mstatus, {}", in(reg) 1 << 3);
