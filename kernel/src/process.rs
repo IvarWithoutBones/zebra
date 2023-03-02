@@ -3,6 +3,7 @@
 use {
     crate::memory::{allocator, page},
     alloc::boxed::Box,
+    core::arch::asm,
 };
 
 const STACK_SIZE: usize = 4096;
@@ -66,22 +67,66 @@ impl Process {
         // Set the stack pointer (x2)
         proc.trap_frame.registers[2] = STACK_ADDR + STACK_SIZE;
 
+        // Map the stack
+        proc.page_table.identity_map(
+            STACK_ADDR,
+            STACK_ADDR + STACK_SIZE,
+            page::EntryAttributes::UserReadWrite as _,
+        );
+
         // Map the program
         proc.page_table.identity_map(
             PROGRAM_ADDR,
             func as usize,
-            page::EntryAttributes::ReadExecute as _,
+            page::EntryAttributes::UserReadExecute as _,
         );
 
-        // TODO: is this the trampoline?
+        // Map the UART
         proc.page_table.identity_map(
-            PROGRAM_ADDR + 0x1000,
-            func as usize + 0x1000,
-            page::EntryAttributes::ReadExecute as _,
+            0x1000_0000,
+            0x1000_0000 + 0x1000,
+            page::EntryAttributes::UserReadWrite as _,
         );
 
         proc
     }
+
+    pub fn run(&self) {
+        print_satp();
+
+        let satp = {
+            let mode = 8; // Sv39
+            (&*self.page_table as *const _ as usize / crate::memory::PAGE_SIZE) | (mode << 60)
+        };
+
+        println!("new satp: {:#x}", satp);
+
+        unsafe {
+            // Change to user mode
+            asm!("csrc sstatus, {}", in(reg) 1 << 8);
+
+            // Set the program counter
+            asm!("csrw sepc, {}", in(reg) self.program_counter);
+
+            // Switch into the process's page table
+            asm!("sfence.vma");
+            asm!("csrw satp, {}", in(reg) satp);
+
+            print_satp();
+
+            asm!("sret");
+        }
+    }
+}
+
+fn print_satp() {
+    let satp = unsafe {
+        let satp: usize;
+        asm!("csrr {}, satp", out(reg) satp);
+        satp
+    };
+
+    println!("current satp: {satp:#x}");
 }
 
 impl Drop for Process {

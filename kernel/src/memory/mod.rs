@@ -5,7 +5,7 @@ mod sections;
 use crate::{power, spinlock::SpinlockGuard, trap::plic, uart};
 
 const PAGE_ORDER: usize = 12;
-const PAGE_SIZE: usize = 1 << PAGE_ORDER; // 4 KiB
+pub const PAGE_SIZE: usize = 1 << PAGE_ORDER; // 4 KiB
 
 // TODO: Assuming 128 MiB of memory as qemu uses that.
 const TOTAL_PAGES: usize = (128 * (1024 * 1024)) / PAGE_SIZE;

@@ -115,17 +115,15 @@ impl Table {
         }
     }
 
-    pub fn kernel_map(&mut self, vaddr: usize, paddr: usize, flags: usize) {
-        assert!(
-            !EntryAttributes::User.contains(flags),
-            "User pages are not supported"
-        );
-        self.map_addr(vaddr, paddr, flags, 0);
-    }
-
     fn map_addr(&mut self, vaddr: usize, paddr: usize, flags: usize, level: usize) {
-        assert!(paddr % PAGE_SIZE == 0, "physical address unaligned: {paddr:#x}");
-        assert!(vaddr % PAGE_SIZE == 0, "virtual address unaligned: {vaddr:#x}");
+        assert!(
+            paddr % PAGE_SIZE == 0,
+            "physical address unaligned: {paddr:#x}"
+        );
+        assert!(
+            vaddr % PAGE_SIZE == 0,
+            "virtual address unaligned: {vaddr:#x}"
+        );
         assert!(level <= 2, "invalid level: {level}");
 
         let vpn = VirtualPageNumber(vaddr);
@@ -151,6 +149,14 @@ impl Table {
 
         // Map the requested address
         *v = Entry::new(paddr, flags | EntryAttributes::Valid as usize);
+    }
+
+    pub fn kernel_map(&mut self, vaddr: usize, paddr: usize, flags: usize) {
+        assert!(
+            !EntryAttributes::User.contains(flags),
+            "User pages are not supported"
+        );
+        self.map_addr(vaddr, paddr, flags, 0);
     }
 
     pub fn identity_map(&mut self, start: usize, end: usize, flags: usize) {

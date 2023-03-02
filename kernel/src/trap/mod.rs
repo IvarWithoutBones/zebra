@@ -123,6 +123,12 @@ impl Exception {
             value
         };
 
+        let sstatus = unsafe {
+            let value: usize;
+            asm!("csrr {}, sstatus", lateout(reg) value);
+            value
+        };
+
         if stval != 0 {
             let sepc = unsafe {
                 let value: usize;
@@ -132,14 +138,14 @@ impl Exception {
 
             if let Some(paddr) = unsafe { (*page::root_table()).physical_addr(sepc) } {
                 panic!(
-                    "unhandled exception: {self:?}, stval={stval:#x}, physical address={paddr:#x}"
+                    "unhandled exception: {self:?}, stval={stval:#x}, physical address={paddr:#x}, sstatus={sstatus:#x}",
                 );
             } else {
-                panic!("unhandled exception: {self:?}, stval={stval:#x}");
+                panic!("unhandled exception: {self:?}, stval={stval:#x}, sstatus={sstatus:#x}");
             }
         }
 
-        panic!("unhandled exception: {self:?}");
+        panic!("unhandled exception: {self:?}, sstatus={sstatus:#x}");
     }
 }
 
