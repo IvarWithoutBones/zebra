@@ -36,9 +36,8 @@
 
         devShells.default = pkgs.mkShell {
           packages = [
-            overlayPackages.rustToolchain.availableComponents.rust-analyzer
-            overlayPackages.rustToolchain.availableComponents.clippy
             overlayPackages.rustToolchain
+            overlayPackages.rustToolchain.availableComponents.rust-analyzer
             pkgs.cargo-binutils
             pkgs.qemu
           ];

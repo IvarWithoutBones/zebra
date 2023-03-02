@@ -39,7 +39,7 @@ macro_rules! print {
 /// used to allow fetching the name of the test function.
 #[cfg(test)]
 pub trait Testable {
-    fn run(&self) -> ();
+    fn run(&self);
 }
 
 #[cfg(test)]

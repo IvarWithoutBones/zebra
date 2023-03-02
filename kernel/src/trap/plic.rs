@@ -16,6 +16,7 @@ where
     enable_device(T::INTERRUPT_ID);
 }
 
+#[allow(clippy::enum_variant_names)] // Just matching the spec
 #[repr(usize)]
 pub enum Registers {
     SupervisorEnable = 0x2080,
@@ -24,19 +25,19 @@ pub enum Registers {
 }
 
 impl Registers {
-    unsafe fn as_ptr(self) -> *mut u32 {
+    unsafe fn into_ptr(self) -> *mut u32 {
         (BASE_ADDR + (self as usize)) as _
     }
 
     fn read(self) -> u32 {
-        unsafe { self.as_ptr().read_volatile() }
+        unsafe { self.into_ptr().read_volatile() }
     }
 
     fn write<T>(self, value: T)
     where
         T: Into<u32>,
     {
-        unsafe { self.as_ptr().write_volatile(value.into()) }
+        unsafe { self.into_ptr().write_volatile(value.into()) }
     }
 }
 

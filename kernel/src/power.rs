@@ -28,18 +28,18 @@ impl From<u32> for ExitType {
             REBOOT => Self::Reboot,
             SUCCESS => Self::Success,
             FAILURE => Self::Failure,
-            _ => Self::Other(code),
+            _ => Self::Other(to_exit_code(code)),
         }
     }
 }
 
-impl Into<u32> for ExitType {
-    fn into(self) -> u32 {
-        match self {
-            Self::Reboot => REBOOT,
-            Self::Success => SUCCESS,
-            Self::Failure => FAILURE,
-            Self::Other(code) => to_exit_code(code),
+impl From<ExitType> for u32 {
+    fn from(val: ExitType) -> Self {
+        match val {
+            ExitType::Reboot => REBOOT,
+            ExitType::Success => SUCCESS,
+            ExitType::Failure => FAILURE,
+            ExitType::Other(code) => to_exit_code(code),
         }
     }
 }

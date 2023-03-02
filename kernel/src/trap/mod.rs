@@ -32,6 +32,7 @@ pub unsafe fn enable_interrupts() {
     println!("interrupts enabled");
 }
 
+#[allow(clippy::enum_variant_names)] // Just matching the spec
 #[derive(Debug, PartialEq, Eq)]
 enum Interrupt {
     SupervisorSoftware,

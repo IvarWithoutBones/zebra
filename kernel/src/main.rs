@@ -43,11 +43,3 @@ extern "C" fn kernel_main() {
         unsafe { asm!("wfi") }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[test_case]
-    fn basic() {
-        assert!(true);
-    }
-}

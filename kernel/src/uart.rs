@@ -152,16 +152,16 @@ pub fn interrupt() {
     UART.lock_with(|uart| {
         while let Some(byte) = uart.poll() {
             let c = byte as char;
-            write!(uart, "got char: '{c}' ({byte:#02x})\n").unwrap();
+            writeln!(uart, "got char: '{c}' ({byte:#02x})").unwrap();
 
             match c {
                 'q' => {
-                    write!(uart, "shutting down\n").unwrap();
+                    writeln!(uart, "shutting down").unwrap();
                     power::shutdown(power::ExitType::Success);
                 }
 
                 'r' => {
-                    write!(uart, "rebooting\n").unwrap();
+                    writeln!(uart, "rebooting").unwrap();
                     power::shutdown(power::ExitType::Reboot);
                 }
 

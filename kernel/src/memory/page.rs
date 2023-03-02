@@ -17,7 +17,7 @@ const TABLE_LEN: usize = 512;
 pub struct Entry(usize);
 
 #[repr(transparent)]
-pub struct VPN(usize);
+pub struct VirtualPageNumber(usize);
 
 #[derive(Debug)]
 #[repr(C, align(4096))]
@@ -45,14 +45,14 @@ pub enum EntryAttributes {
 }
 
 impl EntryAttributes {
-    const fn is_set(self, data: usize) -> bool {
+    const fn contains(self, data: usize) -> bool {
         data & (self as usize) != 0
     }
 }
 
 impl Entry {
     const fn is_valid(&self) -> bool {
-        EntryAttributes::Valid.is_set(self.0)
+        EntryAttributes::Valid.contains(self.0)
     }
 
     const fn paddr(&self) -> usize {
@@ -64,7 +64,7 @@ impl Entry {
     }
 }
 
-impl VPN {
+impl VirtualPageNumber {
     const fn vpn0(&self) -> usize {
         (self.0 >> 12) & 0x1ff
     }
@@ -96,7 +96,7 @@ impl Table {
 
     pub fn kernel_map(&mut self, vaddr: usize, paddr: usize, flags: usize) {
         assert!(
-            !EntryAttributes::User.is_set(flags),
+            !EntryAttributes::User.contains(flags),
             "User pages are not supported"
         );
         self.map_addr(vaddr, paddr, flags, 0);
@@ -107,7 +107,7 @@ impl Table {
         assert!(vaddr % PAGE_SIZE == 0);
         assert!(level <= 2);
 
-        let vpn = VPN(vaddr);
+        let vpn = VirtualPageNumber(vaddr);
         let mut v = &mut self.entries[vpn.vpn2()];
 
         // Traverse the page table to a leaf
@@ -143,7 +143,7 @@ impl Table {
 
     pub fn physical_addr(&self, mut vaddr: usize) -> Option<usize> {
         vaddr = align_page_down(vaddr);
-        let vpn = VPN(vaddr);
+        let vpn = VirtualPageNumber(vaddr);
         let mut v = &self.entries[vpn.vpn2()];
 
         for lvl in (0..2).rev() {
