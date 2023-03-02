@@ -6,6 +6,18 @@ use {
 
 static KERNEL_PAGE_TABLE: Table = Table::new();
 
+pub fn init() {
+    let satp = {
+        let mode = 8; // Sv39
+        (root_table() as usize / PAGE_SIZE) | (mode << 60)
+    };
+
+    unsafe {
+        // NOTE: `sfence.vma` is not required, the TLB will be freshly populated on the next memory access
+        asm!("csrw satp, {}", in(reg) satp);
+    }
+}
+
 pub fn root_table() -> *const Table {
     &KERNEL_PAGE_TABLE as _
 }
@@ -53,6 +65,15 @@ impl EntryAttributes {
 impl Entry {
     const fn is_valid(&self) -> bool {
         EntryAttributes::Valid.contains(self.0)
+    }
+
+    const fn is_user(&self) -> bool {
+        EntryAttributes::User.contains(self.0)
+    }
+
+    const fn is_leaf(&self) -> bool {
+        // TODO: prettify
+        self.0 & 0xe != 0
     }
 
     const fn paddr(&self) -> usize {
@@ -163,14 +184,18 @@ impl Table {
     }
 }
 
-pub fn init() {
-    let satp = {
-        let mode = 8; // Sv39
-        (root_table() as usize / PAGE_SIZE) | (mode << 60)
-    };
-
-    unsafe {
-        // NOTE: `sfence.vma` is not required, the TLB will be freshly populated on the next memory access
-        asm!("csrw satp, {}", in(reg) satp);
+impl Drop for Table {
+    fn drop(&mut self) {
+        for entry in self.entries.iter_mut() {
+            if entry.is_valid() {
+                if entry.is_leaf() {
+                    if entry.is_user() {
+                        drop(unsafe { Box::from_raw(entry.paddr() as *mut [u8; PAGE_SIZE]) });
+                    }
+                } else {
+                    drop(unsafe { Box::from_raw(entry.paddr() as *mut Table) });
+                }
+            }
+        }
     }
 }

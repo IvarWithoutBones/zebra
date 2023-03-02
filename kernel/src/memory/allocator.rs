@@ -79,7 +79,7 @@ impl Allocator {
         None
     }
 
-    fn deallocate(&mut self, ptr: *mut u8) {
+    pub fn deallocate(&mut self, ptr: *mut u8) {
         let id = self.offset_page_of(ptr);
         let page_stride = self.pages[id];
         for i in 0..page_stride {

@@ -80,6 +80,19 @@ impl Process {
             page::EntryAttributes::UserReadExecute as _,
         );
 
+        // TODO: is this the trampoline?
+        proc.page_table.kernel_map(
+            PROGRAM_ADDR + 0x1000,
+            func as usize + 0x1000,
+            page::EntryAttributes::UserReadExecute as _,
+        );
+
         proc
+    }
+}
+
+impl Drop for Process {
+    fn drop(&mut self) {
+        allocator().deallocate(self.stack);
     }
 }
