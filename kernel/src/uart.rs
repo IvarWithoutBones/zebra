@@ -1,5 +1,6 @@
 use {
     crate::{power, spinlock::Spinlock, trap::plic::InterruptDevice},
+    arbitrary_int::{u10, u3},
     bitbybit::{bitenum, bitfield},
     core::fmt::{self, Write},
 };
@@ -7,7 +8,7 @@ use {
 // See device-trees/qemu-virt.dts
 pub const BASE_ADDR: usize = 0x1000_0000;
 pub const IRQ_ID: usize = 10;
-pub static UART: Spinlock<NS16550a<BASE_ADDR>> = Spinlock::new(NS16550a::new());
+pub static UART: Spinlock<NS16550a> = Spinlock::new(NS16550a::new(BASE_ADDR));
 
 trait UartRegister {
     fn ptr_offset() -> usize;
@@ -72,22 +73,15 @@ struct LineStatus {
 
 impl_uart_register!(LineStatus, 5);
 
-pub struct NS16550a<const BASE_ADDR: usize> {
+pub struct NS16550a {
+    base_ptr: *mut u8,
     interrupt: Interrupt,
     fifo: Fifo,
     line_control: LineControl,
 }
 
-impl<const BASE_ADDR: usize> UartRegister for NS16550a<BASE_ADDR> {
-    fn ptr_offset() -> usize {
-        0
-    }
-}
-
-impl<const BASE_ADDR: usize> NS16550a<BASE_ADDR> {
-    const BASE_PTR: *mut u8 = BASE_ADDR as _;
-
-    const fn new() -> Self {
+impl NS16550a {
+    const fn new(base_addr: usize) -> Self {
         let interrupt = Interrupt::new().with_enabled(true);
         let fifo = Fifo::new().with_enabled(true);
         let line_control = LineControl::new()
@@ -95,6 +89,7 @@ impl<const BASE_ADDR: usize> NS16550a<BASE_ADDR> {
             .with_word_length(WordLength::Eight);
 
         Self {
+            base_ptr: base_addr as _,
             interrupt,
             fifo,
             line_control,
@@ -120,18 +115,24 @@ impl<const BASE_ADDR: usize> NS16550a<BASE_ADDR> {
     where
         T: UartRegister,
     {
-        unsafe { Self::BASE_PTR.add(T::ptr_offset()).read_volatile() }
+        unsafe { self.base_ptr.add(T::ptr_offset()).read_volatile() }
     }
 
     fn write<T>(&self, data: u8)
     where
         T: UartRegister,
     {
-        unsafe { Self::BASE_PTR.add(T::ptr_offset()).write_volatile(data) }
+        unsafe { self.base_ptr.add(T::ptr_offset()).write_volatile(data) }
     }
 }
 
-impl<const BASE_ADDR: usize> fmt::Write for NS16550a<BASE_ADDR> {
+impl UartRegister for NS16550a {
+    fn ptr_offset() -> usize {
+        0
+    }
+}
+
+impl fmt::Write for NS16550a {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for &byte in s.as_bytes() {
             self.write::<Self>(byte);
@@ -140,15 +141,16 @@ impl<const BASE_ADDR: usize> fmt::Write for NS16550a<BASE_ADDR> {
     }
 }
 
-impl<const BASE_ADDR: usize> InterruptDevice for NS16550a<BASE_ADDR> {
-    const INTERRUPT_ID: arbitrary_int::u10 = arbitrary_int::u10::new(10);
+impl InterruptDevice for NS16550a {
+    const INTERRUPT_ID: u10 = u10::new(10);
 
-    fn priority() -> arbitrary_int::u3 {
+    fn priority() -> u3 {
         arbitrary_int::u3::new(1)
     }
 }
 
 pub fn interrupt() {
+    // TODO: blocking here is unfortunate, this should be moved to a queue instead.
     UART.lock_with(|uart| {
         while let Some(byte) = uart.poll() {
             let c = byte as char;

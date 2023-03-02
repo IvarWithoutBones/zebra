@@ -30,7 +30,7 @@ extern "C" fn kernel_main() {
         trap::attach_supervisor_trap_vector();
         memory::init();
         trap::plic::set_global_threshold(u3::new(0));
-        trap::plic::add_device::<uart::NS16550a<{ uart::BASE_ADDR }>>();
+        trap::plic::add_device::<uart::NS16550a>();
         trap::enable_interrupts();
     }
 
