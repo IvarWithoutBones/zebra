@@ -35,11 +35,14 @@
         };
 
         devShells.default = pkgs.mkShell {
-          packages = [
-            overlayPackages.rustToolchain
+          packages = with pkgs; [
+            overlayPackages.rustToolchain # Configured with `./rust-toolchain.toml`
             overlayPackages.rustToolchain.availableComponents.rust-analyzer
-            pkgs.cargo-binutils
-            pkgs.qemu
+            just
+            jq
+            qemu
+            gdb
+            cargo-binutils
           ];
         };
       }) // {
