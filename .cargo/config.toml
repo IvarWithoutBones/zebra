@@ -2,4 +2,4 @@
 target = "riscv64gc-unknown-none-elf"
 
 [target.riscv64gc-unknown-none-elf]
-runner = "qemu-system-riscv64 -machine virt -cpu rv64 -bios none -smp 2 -m 128M -nographic -serial mon:stdio -kernel "
+runner = "just run "

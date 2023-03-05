@@ -1,17 +1,49 @@
 # vim: set ft=make :
 
-target_triple := env_var_or_default("CARGO_BUILD_TARGET", "riscv64gc-unknown-none-elf")
-profile := env_var_or_default("PROFILE", "debug")
+default: run
+
+alias r := run
+alias d := debug
+alias g := gdb
+alias b := build
+alias t := test
+
 qemu_extra_args := env_var_or_default("QEMU_EXTRA_ARGS", "")
 
-alias q := qemu
+# Fetch the path to cargo's build artifacts
+kernel_image_path := ```
+	test -n "${KERNEL_IMAGE-}" && {
+		echo "$KERNEL_IMAGE"
+		exit 0
+	}
 
-default: qemu
+	# Environment variables set by cargo
+	TARGET_TRIPLE="${TARGET_TRIPLE:-riscv64gc-unknown-none-elf}"
+	PROFILE="${PROFILE:-debug}"
+	KERNEL_IMAGE="$(cargo metadata --format-version 1 | jq -r '.target_directory')/$TARGET_TRIPLE/$PROFILE/zebra-kernel"
 
-kernel-image-path:
-	@echo `cargo metadata --format-version 1 | jq -r '.target_directory'`/{{target_triple}}/{{profile}}/zebra-kernel
+	test -f "$KERNEL_IMAGE" || {
+		echo "no kernel image found at '$KERNEL_IMAGE'" >&2
+		exit 1
+	}
 
-qemu kernel_path=`just kernel-image-path`:
+	echo "$KERNEL_IMAGE"
+```
+
+# Build the kernel
+build *args:
+	cargo build {{args}}
+
+# Run all tests
+test:
+	cargo check
+	cargo clippy -- -D warnings
+	cargo fmt -- --check
+	cargo test
+	@echo "tests passed"
+
+# Run the kernel in QEMU
+run kernel_path=(kernel_image_path):
 	qemu-system-riscv64 \
 		-machine virt \
 		-cpu rv64 \
@@ -23,8 +55,10 @@ qemu kernel_path=`just kernel-image-path`:
 		-kernel {{kernel_path}} \
 		{{qemu_extra_args}}
 
-@debug kernel_path="":
-	QEMU_EXTRA_ARGS="-S -s ${QEMU_EXTRA_ARGS:-}" just qemu {{kernel_path}}
+# Run the kernel in QEMU and wait for a GDB connection
+@debug kernel_path=(kernel_image_path):
+	QEMU_EXTRA_ARGS="-S -s ${QEMU_EXTRA_ARGS:-}" just run {{kernel_path}}
 
-@gdb kernel_path=`just kernel-image-path`:
+# Connect to a running QEMU instance with GDB
+gdb kernel_path=(kernel_image_path):
 	rust-gdb --quiet -ex "target remote :1234" {{kernel_path}}
