@@ -1,5 +1,3 @@
-# vim: set ft=make :
-
 default: run
 
 alias r := run
@@ -59,6 +57,8 @@ run kernel_path=(kernel_image_path):
 @debug kernel_path=(kernel_image_path):
 	QEMU_EXTRA_ARGS="-S -s ${QEMU_EXTRA_ARGS:-}" just run {{kernel_path}}
 
+@build-and-debug: build debug
+
 # Connect to a running QEMU instance with GDB
 gdb kernel_path=(kernel_image_path):
-	rust-gdb --quiet -ex "target remote :1234" {{kernel_path}}
+	rust-gdb --quiet -ex "target remote :1234" {{kernel_path}} || stty onlcr

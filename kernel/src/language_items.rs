@@ -25,6 +25,10 @@ macro_rules! println {
     ($($args:tt)+) => {{
         $crate::language_items::print(true, format_args!($($args)+));
     }};
+
+    () => {{
+        $crate::language_items::print(true, format_args!(""));
+    }};
 }
 
 /// Printing helper that uses the UART to print to standard output.
