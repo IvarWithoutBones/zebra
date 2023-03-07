@@ -31,11 +31,13 @@ pub enum EntryAttributes {
     Accessed = 1 << 6,
     Dirty = 1 << 7,
 
-    ReadWrite = 0b11 << 1,
-    ReadExecute = 0b101 << 1,
-    UserRead = 0b10010,
-    UserReadWrite = 0b10110,
-    UserReadExecute = 0b11010,
+    ReadWrite = 1 << 1 | 1 << 2,
+    ReadExecute = 1 << 1 | 1 << 3,
+    ReadWriteExecute = 1 << 1 | 1 << 2 | 1 << 3,
+
+    // User Convenience Combinations
+    UserReadWrite = 1 << 1 | 1 << 2 | 1 << 4,
+    UserReadExecute = 1 << 1 | 1 << 3 | 1 << 4,
 }
 
 impl EntryAttributes {
@@ -154,8 +156,18 @@ impl Table {
     pub fn kernel_map(&mut self, vaddr: usize, paddr: usize, flags: usize) {
         assert!(
             !EntryAttributes::User.contains(flags),
-            "User pages are not supported"
+            "User flags supplied"
         );
+
+        self.map_addr(vaddr, paddr, flags, 0);
+    }
+
+    pub fn user_map(&mut self, vaddr: usize, paddr: usize, flags: usize) {
+        assert!(
+            EntryAttributes::User.contains(flags),
+            "Non-user flags supplied"
+        );
+
         self.map_addr(vaddr, paddr, flags, 0);
     }
 
@@ -168,8 +180,7 @@ impl Table {
         }
     }
 
-    pub fn physical_addr(&self, mut vaddr: usize) -> Option<usize> {
-        vaddr = align_page_down(vaddr);
+    pub fn physical_addr(&self, vaddr: usize) -> Option<usize> {
         let vpn = VirtualPageNumber(vaddr);
         let mut v = &self.entries[vpn.vpn2()];
 

@@ -131,3 +131,23 @@ machine_trap_vector:
 machine_trap_handler_call:
     call machine_trap_handler
     mret
+
+# TODO: move
+.global user_enter
+user_enter:
+    # a0: program counter
+    # a1: stack pointer
+    # a2: satp
+
+    # Set the program counter
+    csrw sepc, a0
+
+    # Set the stack pointer
+    mv sp, a1
+
+    # Set the page table
+    csrw satp, a2
+    sfence.vma zero, zero # Flush the TLB
+
+    # Begin executing in user mode
+    sret
