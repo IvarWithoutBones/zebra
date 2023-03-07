@@ -54,11 +54,11 @@ extern "C" fn kernel_main() {
         memory::init();
         trap::plic::set_global_threshold(u3::new(0));
         trap::plic::add_device::<uart::NS16550a>();
-        // trap::enable_interrupts();
+        trap::enable_interrupts();
     }
 
-    let proc = process::Process::new(user_test);
-    println!("process: {:#x}", proc.program_counter);
+    let mut proc = process::Process::new(user_test);
+    println!("process created: {:?}", proc);
     proc.run();
 
     // Start executing the reexported test harness's entry point.

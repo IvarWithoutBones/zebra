@@ -4,38 +4,20 @@ use {
     core::{arch::asm, ptr::read_volatile},
 };
 
-static KERNEL_PAGE_TABLE: Table = Table::new();
+pub static mut KERNEL_PAGE_TABLE: Table = Table::new();
 
 pub fn init() {
-    let satp = {
-        let mode = 8; // Sv39
-        (root_table() as usize / PAGE_SIZE) | (mode << 60)
-    };
-
     unsafe {
         // NOTE: `sfence.vma` is not required, the TLB will be freshly populated on the next memory access
-        asm!("csrw satp, {}", in(reg) satp);
+        asm!("csrw satp, {}", in(reg) root_table().build_satp());
     }
 }
 
-pub fn root_table() -> *const Table {
-    &KERNEL_PAGE_TABLE as _
+pub fn root_table() -> &'static Table {
+    unsafe { &KERNEL_PAGE_TABLE as _ }
 }
 
 const TABLE_LEN: usize = 512;
-
-#[derive(Debug, Copy, Clone)] // For initializer
-#[repr(transparent)]
-pub struct Entry(usize);
-
-#[repr(transparent)]
-pub struct VirtualPageNumber(usize);
-
-#[derive(Debug)]
-#[repr(C, align(4096))]
-pub struct Table {
-    pub entries: [Entry; TABLE_LEN],
-}
 
 /// <https://five-embeddev.com/riscv-isa-manual/latest/supervisor.html#sec:translation>
 #[allow(dead_code)]
@@ -62,6 +44,10 @@ impl EntryAttributes {
     }
 }
 
+#[derive(Debug, Copy, Clone)] // For initializer
+#[repr(transparent)]
+pub struct Entry(usize);
+
 impl Entry {
     const fn is_valid(&self) -> bool {
         EntryAttributes::Valid.contains(self.0)
@@ -84,6 +70,9 @@ impl Entry {
         Self(((ppn & !0xfff) >> 2) | flags)
     }
 }
+
+#[repr(transparent)]
+pub struct VirtualPageNumber(usize);
 
 impl VirtualPageNumber {
     const fn vpn0(&self) -> usize {
@@ -108,11 +97,22 @@ impl VirtualPageNumber {
     }
 }
 
+#[derive(Debug)]
+#[repr(C, align(4096))]
+pub struct Table {
+    pub entries: [Entry; TABLE_LEN],
+}
+
 impl Table {
     pub const fn new() -> Self {
         Self {
             entries: [Entry(0); TABLE_LEN],
         }
+    }
+
+    pub fn build_satp(&self) -> usize {
+        const MODE: usize = 8; // Sv39
+        (self as *const _ as usize / PAGE_SIZE) | (MODE << 60)
     }
 
     fn map_addr(&mut self, vaddr: usize, paddr: usize, flags: usize, level: usize) {

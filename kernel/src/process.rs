@@ -91,16 +91,7 @@ impl Process {
         proc
     }
 
-    pub fn run(&self) {
-        print_satp();
-
-        let satp = {
-            let mode = 8; // Sv39
-            (&*self.page_table as *const _ as usize / crate::memory::PAGE_SIZE) | (mode << 60)
-        };
-
-        println!("new satp: {:#x}", satp);
-
+    pub fn run(&mut self) {
         unsafe {
             // Change to user mode
             asm!("csrc sstatus, {}", in(reg) 1 << 8);
@@ -110,23 +101,11 @@ impl Process {
 
             // Switch into the process's page table
             asm!("sfence.vma");
-            asm!("csrw satp, {}", in(reg) satp);
-
-            print_satp();
+            asm!("csrw satp, {}", in(reg) self.page_table.build_satp());
 
             asm!("sret");
         }
     }
-}
-
-fn print_satp() {
-    let satp = unsafe {
-        let satp: usize;
-        asm!("csrr {}, satp", out(reg) satp);
-        satp
-    };
-
-    println!("current satp: {satp:#x}");
 }
 
 impl Drop for Process {

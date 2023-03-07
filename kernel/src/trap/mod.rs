@@ -136,7 +136,7 @@ impl Exception {
                 value
             };
 
-            if let Some(paddr) = unsafe { (*page::root_table()).physical_addr(sepc) } {
+            if let Some(paddr) = page::root_table().physical_addr(sepc) {
                 panic!(
                     "unhandled exception: {self:?}, stval={stval:#x}, physical address={paddr:#x}, sstatus={sstatus:#x}",
                 );

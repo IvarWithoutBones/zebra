@@ -31,7 +31,7 @@ pub unsafe fn init() {
 
 unsafe fn map_kernel_sections() {
     // Some funky unsafe syntax to bypass the borrow checker
-    let root_table: &mut page::Table = &mut *(page::root_table() as *mut _);
+    let root_table: &mut page::Table = &mut *(&mut page::KERNEL_PAGE_TABLE as *mut _);
 
     // Map all of our sections
     root_table.identity_map(
