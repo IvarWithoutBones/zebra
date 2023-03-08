@@ -78,13 +78,13 @@ unsafe fn map_kernel_sections() {
         page::EntryAttributes::ReadWrite as usize,
     );
 
-    root_table.kernel_map(
+    root_table.map(
         uart::BASE_ADDR,
         uart::BASE_ADDR,
         page::EntryAttributes::ReadWrite as usize,
     );
 
-    root_table.kernel_map(
+    root_table.map(
         power::BASE_ADDR,
         power::BASE_ADDR,
         page::EntryAttributes::ReadWrite as usize,

@@ -153,21 +153,7 @@ impl Table {
         *v = Entry::new(paddr, flags | EntryAttributes::Valid as usize);
     }
 
-    pub fn kernel_map(&mut self, vaddr: usize, paddr: usize, flags: usize) {
-        assert!(
-            !EntryAttributes::User.contains(flags),
-            "User flags supplied"
-        );
-
-        self.map_addr(vaddr, paddr, flags, 0);
-    }
-
-    pub fn user_map(&mut self, vaddr: usize, paddr: usize, flags: usize) {
-        assert!(
-            EntryAttributes::User.contains(flags),
-            "Non-user flags supplied"
-        );
-
+    pub fn map(&mut self, vaddr: usize, paddr: usize, flags: usize) {
         self.map_addr(vaddr, paddr, flags, 0);
     }
 

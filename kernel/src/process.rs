@@ -1,11 +1,11 @@
 use {
     crate::memory::{allocator, page, PAGE_SIZE},
     alloc::boxed::Box,
-    core::fmt::Debug,
+    core::fmt,
 };
 
 const PROGRAM_START: usize = 0x2000_0000;
-const STACK_PAGES: usize = 4;
+const STACK_PAGES: usize = 4 * PAGE_SIZE;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -31,26 +31,27 @@ extern "C" {
 
 impl Process {
     pub fn new(func: fn()) -> Self {
-        let stack = { allocator().allocate(PAGE_SIZE).unwrap() };
+        let stack = { allocator().allocate(STACK_PAGES).unwrap() };
         let mut page_table = page::Table::new();
 
         // Map the initialisation code so that we can enter user mode after switching to the new page table
         page_table.identity_map(
             user_enter as usize,
-            user_enter as usize + PAGE_SIZE, // TODO: how do we calculate this?
+            user_enter as usize + PAGE_SIZE, // TODO: how do know the size of this?
             page::EntryAttributes::ReadExecute as _,
         );
 
-        // Map the user stack
-        // TODO: seems to be broken
-        page_table.identity_map(
-            stack as usize,
-            stack as usize + (PAGE_SIZE * STACK_PAGES),
-            page::EntryAttributes::UserReadWrite as _,
-        );
+        // Map the users stack
+        for page in 0..STACK_PAGES {
+            page_table.map(
+                stack as usize + (PAGE_SIZE * page),
+                stack as usize + (PAGE_SIZE * page),
+                page::EntryAttributes::UserReadWrite as _,
+            );
+        }
 
-        // Map the user program
-        page_table.user_map(
+        // Map the users program
+        page_table.map(
             PROGRAM_START,
             func as usize,
             page::EntryAttributes::UserReadExecute as _,
@@ -59,7 +60,7 @@ impl Process {
         Self {
             state: ProcessState::Waiting,
             pid: 0,
-            stack,
+            stack: unsafe { stack.add(PAGE_SIZE * STACK_PAGES) },
             program_counter: PROGRAM_START,
             page_table: Box::new(page_table),
         }
@@ -82,8 +83,8 @@ impl Drop for Process {
     }
 }
 
-impl Debug for Process {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Debug for Process {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Process")
             .field("state", &self.state)
             .field("pid", &self.pid)

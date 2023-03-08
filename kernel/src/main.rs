@@ -26,10 +26,12 @@ global_asm!(include_str!("./asm/entry.s"));
 fn user_func() {
     unsafe {
         asm!("li t0, 0xdeadbeef");
-        asm!("li a0, 0");
+
+        #[allow(unused_variables)]
+        let mut i = 0;
 
         loop {
-            asm!("addi a0, a0, 1");
+            i += 1;
         }
     }
 }
