@@ -12,6 +12,7 @@ set max-value-size unlimited
 set pagination off
 set confirm off
 set disassemble-next-line on
+set step-mode on
 
 define regs
     info registers

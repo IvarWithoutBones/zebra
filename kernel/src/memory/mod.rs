@@ -37,37 +37,37 @@ unsafe fn map_kernel_sections() {
     root_table.identity_map(
         sections::TEXT_START(),
         sections::TEXT_END(),
-        page::EntryAttributes::ReadExecute as usize,
+        page::EntryAttributes::ReadExecute,
     );
 
     root_table.identity_map(
         sections::RODATA_START(),
         sections::RODATA_END(),
-        page::EntryAttributes::ReadExecute as usize,
+        page::EntryAttributes::ReadExecute,
     );
 
     root_table.identity_map(
         sections::DATA_START(),
         sections::DATA_END(),
-        page::EntryAttributes::ReadWrite as usize,
+        page::EntryAttributes::ReadWrite,
     );
 
     root_table.identity_map(
         sections::BSS_START(),
         sections::BSS_END(),
-        page::EntryAttributes::ReadWrite as usize,
+        page::EntryAttributes::ReadWrite,
     );
 
     root_table.identity_map(
         sections::STACK_START(),
         sections::STACK_END(),
-        page::EntryAttributes::ReadWrite as usize,
+        page::EntryAttributes::ReadWrite,
     );
 
     root_table.identity_map(
         sections::HEAP_START(),
         sections::HEAP_END(),
-        page::EntryAttributes::ReadWrite as usize,
+        page::EntryAttributes::ReadWrite,
     );
 
     // Map the peripherals devices. TODO: Could be prettier.
@@ -75,19 +75,19 @@ unsafe fn map_kernel_sections() {
     root_table.identity_map(
         plic::BASE_ADDR,
         plic::BASE_ADDR + 0x400000,
-        page::EntryAttributes::ReadWrite as usize,
+        page::EntryAttributes::ReadWrite,
     );
 
     root_table.map(
         uart::BASE_ADDR,
         uart::BASE_ADDR,
-        page::EntryAttributes::ReadWrite as usize,
+        page::EntryAttributes::ReadWrite,
     );
 
     root_table.map(
         power::BASE_ADDR,
         power::BASE_ADDR,
-        page::EntryAttributes::ReadWrite as usize,
+        page::EntryAttributes::ReadWrite,
     );
 }
 

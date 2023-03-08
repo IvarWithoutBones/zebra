@@ -28,10 +28,10 @@ fn user_func() {
         asm!("li t0, 0xdeadbeef");
 
         #[allow(unused_variables)]
-        let mut i = 0;
+        let mut i: usize = 0;
 
         loop {
-            i += 1;
+            i = i.wrapping_add(1);
         }
     }
 }

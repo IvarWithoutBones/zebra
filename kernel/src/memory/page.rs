@@ -21,6 +21,7 @@ const TABLE_LEN: usize = 512;
 
 /// <https://five-embeddev.com/riscv-isa-manual/latest/supervisor.html#sec:translation>
 #[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub enum EntryAttributes {
     Valid = 1 << 0,
     Readable = 1 << 1,
@@ -117,7 +118,7 @@ impl Table {
         (self as *const _ as usize / PAGE_SIZE) | (MODE << 60)
     }
 
-    fn map_addr(&mut self, vaddr: usize, paddr: usize, flags: usize, level: usize) {
+    fn map_addr(&mut self, vaddr: usize, paddr: usize, flags: EntryAttributes, level: usize) {
         assert!(
             paddr % PAGE_SIZE == 0,
             "physical address unaligned: {paddr:#x}"
@@ -150,18 +151,18 @@ impl Table {
         }
 
         // Map the requested address
-        *v = Entry::new(paddr, flags | EntryAttributes::Valid as usize);
+        *v = Entry::new(paddr, flags as usize | EntryAttributes::Valid as usize);
     }
 
-    pub fn map(&mut self, vaddr: usize, paddr: usize, flags: usize) {
+    pub fn map(&mut self, vaddr: usize, paddr: usize, flags: EntryAttributes) {
         self.map_addr(vaddr, paddr, flags, 0);
     }
 
-    pub fn identity_map(&mut self, start: usize, end: usize, flags: usize) {
+    pub fn identity_map(&mut self, start: usize, end: usize, flags: EntryAttributes) {
         let mut addr = align_page_down(start);
         let num_kb_pages = (align_page_up(end) - addr) / PAGE_SIZE;
         for _ in 0..num_kb_pages {
-            self.map_addr(addr, addr, flags, 0);
+            self.map_addr(addr, addr, flags.clone(), 0);
             addr += PAGE_SIZE;
         }
     }

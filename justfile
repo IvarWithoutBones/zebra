@@ -46,16 +46,16 @@ run kernel_path=(kernel_image_path):
 		-machine virt \
 		-cpu rv64 \
 		-bios none \
-		-smp 2 \
+		-smp 1 \
 		-m 128M \
 		-nographic \
 		-serial mon:stdio \
-		-kernel {{kernel_path}} \
-		{{qemu_extra_args}}
+		{{qemu_extra_args}} \
+		-kernel {{kernel_path}}
 
 # Run the kernel in QEMU and wait for a GDB connection
 @debug kernel_path=(kernel_image_path):
-	QEMU_EXTRA_ARGS="-S -s ${QEMU_EXTRA_ARGS:-}" just run {{kernel_path}}
+	QEMU_EXTRA_ARGS="-S -gdb tcp::1234 ${QEMU_EXTRA_ARGS:-}" just run {{kernel_path}}
 
 @build-and-debug: build debug
 
