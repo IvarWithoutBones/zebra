@@ -7,25 +7,23 @@ alias b := build
 alias t := test
 
 qemu_extra_args := env_var_or_default("QEMU_EXTRA_ARGS", "")
+gdb_port := env_var_or_default("GDB_PORT", "1234")
 
 # Fetch the path to cargo's build artifacts
 kernel_image_path := ```
-	test -n "${KERNEL_IMAGE-}" && {
-		echo "$KERNEL_IMAGE"
-		exit 0
+	test -z "${KERNEL_IMAGE-}" && {
+	    # Environment variables set by cargo
+	    TARGET_TRIPLE="${TARGET_TRIPLE:-riscv64gc-unknown-none-elf}"
+	    PROFILE="${PROFILE:-debug}"
+	    KERNEL_IMAGE="$(cargo metadata --format-version 1 | jq -r ".target_directory")/$TARGET_TRIPLE/$PROFILE/zebra-kernel"
 	}
 
-	# Environment variables set by cargo
-	TARGET_TRIPLE="${TARGET_TRIPLE:-riscv64gc-unknown-none-elf}"
-	PROFILE="${PROFILE:-debug}"
-	KERNEL_IMAGE="$(cargo metadata --format-version 1 | jq -r '.target_directory')/$TARGET_TRIPLE/$PROFILE/zebra-kernel"
-
-	test -f "$KERNEL_IMAGE" || {
-		echo "no kernel image found at '$KERNEL_IMAGE'" >&2
-		exit 1
-	}
-
-	echo "$KERNEL_IMAGE"
+    path="$(realpath "$KERNEL_IMAGE")"
+    test -f "$path" || {
+        echo "no kernel image found at '$path'" >&2
+        kill $$ # Exit even if we're in a subshell
+    }
+    echo "$path"
 ```
 
 # Build the kernel
@@ -55,10 +53,10 @@ run kernel_path=(kernel_image_path):
 
 # Run the kernel in QEMU and wait for a GDB connection
 @debug kernel_path=(kernel_image_path):
-	QEMU_EXTRA_ARGS="-S -gdb tcp::1234 ${QEMU_EXTRA_ARGS:-}" just run {{kernel_path}}
+	QEMU_EXTRA_ARGS="-S -gdb tcp::{{gdb_port}} ${QEMU_EXTRA_ARGS:-}" just run {{kernel_path}}
 
 @build-and-debug: build debug
 
 # Connect to a running QEMU instance with GDB
 gdb kernel_path=(kernel_image_path):
-	rust-gdb --quiet -ex "target remote :1234" {{kernel_path}} || stty onlcr
+	rust-gdb --quiet -ex "target remote :{{gdb_port}}" {{kernel_path}} || stty onlcr

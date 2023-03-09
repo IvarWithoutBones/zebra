@@ -11,8 +11,7 @@ let
   sourceCode = lib.cleanSourceWith {
     src = inputs.self;
     filter = path: type:
-      !(lib.hasSuffix ".nix" path)
-      || !(builtins.baseNameOf path == "flake.lock")
+      (baseNameOf path == "justfile")
       || (lib.hasSuffix ".s" path)
       || (lib.hasSuffix ".ld" path)
       || (craneLib.filterCargoSources path type);
@@ -37,6 +36,6 @@ in
 
     zebra-runner = zebraPackages.zebra-kernel.runner;
 
-    resources = callPackage ./resources { };
+    docs = callPackage ./docs { };
   };
 }
