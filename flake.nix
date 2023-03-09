@@ -43,6 +43,8 @@
             qemu
             gdb
             cargo-binutils
+            nil
+            nixpkgs-fmt
           ];
         };
       }) // {
