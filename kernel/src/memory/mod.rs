@@ -1,8 +1,8 @@
 mod allocator;
 pub mod page;
-mod sections;
+pub mod sections;
 
-use crate::{power, spinlock::SpinlockGuard, trap::plic, uart};
+use crate::spinlock::SpinlockGuard;
 
 const PAGE_ORDER: usize = 12;
 pub const PAGE_SIZE: usize = 1 << PAGE_ORDER; // 4 KiB
@@ -20,75 +20,15 @@ pub unsafe fn init() {
     println!("allocator initialized");
 
     println!("mapping kernel sections...");
-    map_kernel_sections();
+    // Some funky unsafe magic to get around the borrow checker
+    let root_table: &mut page::Table = &mut *(&mut page::KERNEL_PAGE_TABLE as *mut _);
+    sections::map_kernel(root_table);
     println!("succesfully mapped kernel sections");
 
     // TODO: This must be called for every hart, will need to be moved later
     println!("enabling paging...");
     page::init();
     println!("paging enabled");
-}
-
-unsafe fn map_kernel_sections() {
-    // Some funky unsafe syntax to bypass the borrow checker
-    let root_table: &mut page::Table = &mut *(&mut page::KERNEL_PAGE_TABLE as *mut _);
-
-    // Map all of our sections
-    root_table.identity_map(
-        sections::TEXT_START(),
-        sections::TEXT_END(),
-        page::EntryAttributes::ReadExecute,
-    );
-
-    root_table.identity_map(
-        sections::RODATA_START(),
-        sections::RODATA_END(),
-        page::EntryAttributes::ReadExecute,
-    );
-
-    root_table.identity_map(
-        sections::DATA_START(),
-        sections::DATA_END(),
-        page::EntryAttributes::ReadWrite,
-    );
-
-    root_table.identity_map(
-        sections::BSS_START(),
-        sections::BSS_END(),
-        page::EntryAttributes::ReadWrite,
-    );
-
-    root_table.identity_map(
-        sections::STACK_START(),
-        sections::STACK_END(),
-        page::EntryAttributes::ReadWrite,
-    );
-
-    root_table.identity_map(
-        sections::HEAP_START(),
-        sections::HEAP_END(),
-        page::EntryAttributes::ReadWrite,
-    );
-
-    // Map the peripherals devices. TODO: Could be prettier.
-
-    root_table.identity_map(
-        plic::BASE_ADDR,
-        plic::BASE_ADDR + 0x400000,
-        page::EntryAttributes::ReadWrite,
-    );
-
-    root_table.map(
-        uart::BASE_ADDR,
-        uart::BASE_ADDR,
-        page::EntryAttributes::ReadWrite,
-    );
-
-    root_table.map(
-        power::BASE_ADDR,
-        power::BASE_ADDR,
-        page::EntryAttributes::ReadWrite,
-    );
 }
 
 /// Align an address to upper bound according to specified order.

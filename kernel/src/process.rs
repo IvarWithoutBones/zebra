@@ -1,5 +1,9 @@
 use {
-    crate::memory::{allocator, page, PAGE_SIZE},
+    crate::memory::{
+        allocator, page,
+        sections::{map_trampoline, trampoline_start},
+        PAGE_SIZE,
+    },
     alloc::boxed::Box,
     core::fmt,
 };
@@ -26,7 +30,7 @@ pub struct Process {
 }
 
 extern "C" {
-    fn user_enter(pc: *const u8, sp: *const u8, satp: usize);
+    fn user_enter(pc: *const u8, sp: *const u8, satp: usize, trampoline: usize);
 }
 
 impl Process {
@@ -43,7 +47,7 @@ impl Process {
 
         // Map the users stack
         for page in 0..STACK_PAGES {
-            page_table.map(
+            page_table.map_page(
                 stack as usize + (PAGE_SIZE * page),
                 stack as usize + (PAGE_SIZE * page),
                 page::EntryAttributes::UserReadWrite,
@@ -51,11 +55,14 @@ impl Process {
         }
 
         // Map the users program
-        page_table.map(
+        page_table.map_page(
             PROGRAM_START,
             func as usize,
             page::EntryAttributes::UserReadExecute,
         );
+
+        // Map the trampoline
+        map_trampoline(&mut page_table);
 
         Self {
             state: ProcessState::Waiting,
@@ -72,6 +79,7 @@ impl Process {
                 self.program_counter as _,
                 self.stack,
                 self.page_table.build_satp(),
+                trampoline_start(),
             );
         }
     }

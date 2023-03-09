@@ -91,6 +91,6 @@ impl Allocator {
 // NOTE: Before this is called heap allocations will deadlock the kernel!
 pub unsafe fn init() {
     ALLOCATOR.lock_with(|alloc| {
-        alloc.base_addr = align_page_up(sections::HEAP_START());
+        alloc.base_addr = align_page_up(sections::heap_start());
     });
 }

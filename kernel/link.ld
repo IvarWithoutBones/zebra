@@ -2,6 +2,7 @@ OUTPUT_ARCH("riscv")
 ENTRY(_start)
 
 MEMORY {
+    /* Use the memory mapping qemu expects */
     ram (wxa) : ORIGIN = 0x80000000, LENGTH = 128M
 }
 
@@ -17,7 +18,16 @@ SECTIONS {
     .text : {
         PROVIDE(_text_start = .);
 
-        *(.text.init) /* The entry point, must match up with `ram.ORIGIN` */
+        /* Entry point, must match up with `ram.ORIGIN` */
+        *(.text.init)
+
+        /* Trampoline page, must be aligned to a page boundary */
+        . = ALIGN(0x1000);
+        PROVIDE(_trampoline_start = .);
+        *(.trampoline)
+        PROVIDE(_trampoline_end = .);
+
+        /* Remaining code */
         *(.text .text.*)
 
         PROVIDE(_text_end = .);
@@ -32,7 +42,7 @@ SECTIONS {
     } >ram AT>ram :rodata
 
     .data : {
-        . = ALIGN(0x1000); /* Align to a page boundary */
+        . = ALIGN(0x1000);
         PROVIDE(_data_start = .);
 
         *(.sdata .sdata.*)

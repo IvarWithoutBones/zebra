@@ -32,6 +32,10 @@ fn user_func() {
 
         loop {
             i = i.wrapping_add(1);
+
+            if i == 0x100000 {
+                asm!("ecall");
+            }
         }
     }
 }
@@ -49,14 +53,14 @@ extern "C" fn kernel_main() {
         // trap::enable_interrupts();
     }
 
-    let mut proc = process::Process::new(user_func);
-    println!("{proc:?}");
-    proc.run();
-
     // Start executing the reexported test harness's entry point.
     // This will shut down the system when testing is complete.
     #[cfg(test)]
     test_entry_point();
+
+    let mut proc = process::Process::new(user_func);
+    println!("{proc:?}");
+    proc.run();
 
     loop {
         unsafe { asm!("wfi") }

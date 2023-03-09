@@ -1,83 +1,90 @@
-#![allow(non_snake_case)]
+use {
+    super::{page, PAGE_SIZE},
+    crate::{power, trap::plic, uart},
+};
 
-extern "C" {
-    static _heap_start: usize;
-    static _heap_end: usize;
+/// Generate a safe wrapper to access a linker section.
+macro_rules! section {
+    ($fn_name: ident, $link_name: ident) => {
+        extern "C" {
+            static $link_name: usize;
+        }
 
-    static _text_start: usize;
-    static _text_end: usize;
-
-    static _rodata_start: usize;
-    static _rodata_end: usize;
-
-    static _data_start: usize;
-    static _data_end: usize;
-
-    static _bss_start: usize;
-    static _bss_end: usize;
-
-    static _stack_start: usize;
-    static _stack_end: usize;
+        /// Returns the address of the corresponding linker section.
+        #[inline(always)]
+        pub fn $fn_name() -> usize {
+            unsafe { &$link_name as *const _ as _ }
+        }
+    };
 }
 
-#[inline]
-pub fn HEAP_START() -> usize {
-    unsafe { &_heap_start as *const _ as _ }
+section!(heap_start, _heap_start);
+section!(heap_end, _heap_end);
+
+section!(text_start, _text_start);
+section!(text_end, _text_end);
+
+section!(rodata_start, _rodata_start);
+section!(rodata_end, _rodata_end);
+
+section!(data_start, _data_start);
+section!(data_end, _data_end);
+
+section!(bss_start, _bss_start);
+section!(bss_end, _bss_end);
+
+section!(stack_start, _stack_start);
+section!(stack_end, _stack_end);
+
+section!(trampoline_start, _trampoline_start);
+section!(trampoline_end, _trampoline_end);
+
+/// Map the trampoline section into the given page table.
+pub fn map_trampoline(page_table: &mut page::Table) {
+    assert!(trampoline_end() - trampoline_start() <= PAGE_SIZE);
+
+    // TODO: really should not be identity mapped
+    page_table.map_page(
+        trampoline_start(),
+        trampoline_start(),
+        page::EntryAttributes::ReadExecute,
+    );
 }
 
-#[inline]
-pub fn HEAP_END() -> usize {
-    unsafe { &_heap_end as *const _ as _ }
-}
+/// Map the kernel sections into the given page table.
+pub fn map_kernel(page_table: &mut page::Table) {
+    // Map the linker sections
+    map_trampoline(page_table);
+    page_table.identity_map(
+        rodata_start(),
+        rodata_end(),
+        page::EntryAttributes::ReadExecute,
+    );
 
-#[inline]
-pub fn TEXT_START() -> usize {
-    unsafe { &_text_start as *const _ as _ }
-}
+    page_table.identity_map(text_start(), text_end(), page::EntryAttributes::ReadExecute);
+    page_table.identity_map(data_start(), data_end(), page::EntryAttributes::ReadWrite);
+    page_table.identity_map(bss_start(), bss_end(), page::EntryAttributes::ReadWrite);
+    page_table.identity_map(stack_start(), stack_end(), page::EntryAttributes::ReadWrite);
+    page_table.identity_map(heap_start(), heap_end(), page::EntryAttributes::ReadWrite);
 
-#[inline]
-pub fn TEXT_END() -> usize {
-    unsafe { &_text_end as *const _ as _ }
-}
+    // Map peripherals devices. TODO: Could be prettier.
+    page_table.identity_map(
+        plic::BASE_ADDR,
+        plic::BASE_ADDR + 0x400000,
+        page::EntryAttributes::ReadWrite,
+    );
 
-#[inline]
-pub fn RODATA_START() -> usize {
-    unsafe { &_rodata_start as *const _ as _ }
-}
+    page_table.map_page(
+        uart::BASE_ADDR,
+        uart::BASE_ADDR,
+        page::EntryAttributes::ReadWrite,
+    );
 
-#[inline]
-pub fn RODATA_END() -> usize {
-    unsafe { &_rodata_end as *const _ as _ }
-}
-
-#[inline]
-pub fn DATA_START() -> usize {
-    unsafe { &_data_start as *const _ as _ }
-}
-
-#[inline]
-pub fn DATA_END() -> usize {
-    unsafe { &_data_end as *const _ as _ }
-}
-
-#[inline]
-pub fn BSS_START() -> usize {
-    unsafe { &_bss_start as *const _ as _ }
-}
-
-#[inline]
-pub fn BSS_END() -> usize {
-    unsafe { &_bss_end as *const _ as _ }
-}
-
-#[inline]
-pub fn STACK_START() -> usize {
-    unsafe { &_stack_start as *const _ as _ }
-}
-
-#[inline]
-pub fn STACK_END() -> usize {
-    unsafe { &_stack_end as *const _ as _ }
+    page_table.map_page(
+        power::BASE_ADDR,
+        power::BASE_ADDR,
+        page::EntryAttributes::ReadWrite,
+    );
 }
 
 #[cfg(test)]
@@ -87,17 +94,19 @@ mod tests {
     // Unknown symbols are ignored if the functions are not used, this gives a linker error instead.
     #[test_case]
     fn symbols_exist() {
-        assert!(HEAP_START() > 0);
-        assert!(HEAP_END() > 0);
-        assert!(TEXT_START() > 0);
-        assert!(TEXT_END() > 0);
-        assert!(RODATA_START() > 0);
-        assert!(RODATA_END() > 0);
-        assert!(DATA_START() > 0);
-        assert!(DATA_END() > 0);
-        assert!(BSS_START() > 0);
-        assert!(BSS_END() > 0);
-        assert!(STACK_START() > 0);
-        assert!(STACK_END() > 0);
+        assert!(heap_start() > 0);
+        assert!(heap_end() > 0);
+        assert!(text_start() > 0);
+        assert!(text_end() > 0);
+        assert!(rodata_start() > 0);
+        assert!(rodata_end() > 0);
+        assert!(data_start() > 0);
+        assert!(data_end() > 0);
+        assert!(bss_start() > 0);
+        assert!(bss_end() > 0);
+        assert!(stack_start() > 0);
+        assert!(stack_end() > 0);
+        assert!(trampoline_start() > 0);
+        assert!(trampoline_end() > 0);
     }
 }

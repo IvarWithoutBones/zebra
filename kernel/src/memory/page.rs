@@ -118,7 +118,7 @@ impl Table {
         (self as *const _ as usize / PAGE_SIZE) | (MODE << 60)
     }
 
-    fn map_addr(&mut self, vaddr: usize, paddr: usize, flags: EntryAttributes, level: usize) {
+    fn map(&mut self, vaddr: usize, paddr: usize, flags: EntryAttributes, level: usize) {
         assert!(
             paddr % PAGE_SIZE == 0,
             "physical address unaligned: {paddr:#x}"
@@ -154,15 +154,15 @@ impl Table {
         *v = Entry::new(paddr, flags as usize | EntryAttributes::Valid as usize);
     }
 
-    pub fn map(&mut self, vaddr: usize, paddr: usize, flags: EntryAttributes) {
-        self.map_addr(vaddr, paddr, flags, 0);
+    pub fn map_page(&mut self, vaddr: usize, paddr: usize, flags: EntryAttributes) {
+        self.map(vaddr, paddr, flags, 0);
     }
 
     pub fn identity_map(&mut self, start: usize, end: usize, flags: EntryAttributes) {
         let mut addr = align_page_down(start);
         let num_kb_pages = (align_page_up(end) - addr) / PAGE_SIZE;
         for _ in 0..num_kb_pages {
-            self.map_addr(addr, addr, flags.clone(), 0);
+            self.map(addr, addr, flags.clone(), 0);
             addr += PAGE_SIZE;
         }
     }
