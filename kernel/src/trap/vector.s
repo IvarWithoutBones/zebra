@@ -1,5 +1,6 @@
-.global supervisor_trap_vector
 .align 4
+.section .rodata.vectors
+.global supervisor_trap_vector
 supervisor_trap_vector:
     # Make room for all our registers on the stack
     addi sp, sp, -256
@@ -77,24 +78,16 @@ supervisor_trap_vector:
     # Return to the point of execution prior to the trap
     sret
 
-.global machine_trap_vector
 .align 4
+.section .rodata.vectors
+.global machine_trap_vector
 machine_trap_vector:
-    # Save some temporary registers
+    # Save the registers we will use
     addi sp, sp, -32
     sd a0, 0(sp)
     sd a1, 8(sp)
     sd a2, 16(sp)
     sd a3, 24(sp)
-
-    # Check if the trap is an interrupt
-    csrr a0, mcause
-    andi a1, a0, 8
-    bnez a1, machine_trap_handler_call
-    # Check if the trap is a timer interrupt
-    andi a1, a0, 7
-    li a2, 7
-    bne a1, a2, machine_trap_handler_call
 
     # Load the context from `clint.rs`, matching the layout defined there:
     #   0: `mtime` pointer
@@ -125,11 +118,6 @@ machine_trap_vector:
     addi sp, sp, 32
 
     # Hand control back to the kernel
-    mret
-
-# This will be called if the trap is not a timer interrupt
-machine_trap_handler_call:
-    call machine_trap_handler
     mret
 
 # TODO: move

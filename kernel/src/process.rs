@@ -38,7 +38,7 @@ impl Process {
         page_table.identity_map(
             user_enter as usize,
             user_enter as usize + PAGE_SIZE, // TODO: how do know the size of this?
-            page::EntryAttributes::ReadExecute as _,
+            page::EntryAttributes::ReadExecute,
         );
 
         // Map the users stack
@@ -46,7 +46,7 @@ impl Process {
             page_table.map(
                 stack as usize + (PAGE_SIZE * page),
                 stack as usize + (PAGE_SIZE * page),
-                page::EntryAttributes::UserReadWrite as _,
+                page::EntryAttributes::UserReadWrite,
             );
         }
 
@@ -54,7 +54,7 @@ impl Process {
         page_table.map(
             PROGRAM_START,
             func as usize,
-            page::EntryAttributes::UserReadExecute as _,
+            page::EntryAttributes::UserReadExecute,
         );
 
         Self {

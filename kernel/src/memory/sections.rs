@@ -2,7 +2,7 @@
 
 extern "C" {
     static _heap_start: usize;
-    static _heap_size: usize; // TODO: inconsistent
+    static _heap_end: usize;
 
     static _text_start: usize;
     static _text_end: usize;
@@ -27,7 +27,7 @@ pub fn HEAP_START() -> usize {
 
 #[inline]
 pub fn HEAP_END() -> usize {
-    HEAP_START() + unsafe { &_heap_size as *const _ as usize }
+    unsafe { &_heap_end as *const _ as _ }
 }
 
 #[inline]

@@ -4,7 +4,7 @@
 .section .text.init
 .global _start
 _start:
-	# Stop the assembler from assuming that `gp` is already initialized
+	# Stop the assembler from assuming this is already initialized
     .option push
     .option norelax
 	la gp, _global_pointer
@@ -58,7 +58,7 @@ clear_bss_loop:
 	# Enter supervisor mode and jump to the kernel
 	mret
 
-.global park_hart
+.section .text.init
 park_hart:
     wfi
     j park_hart
