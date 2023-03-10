@@ -1,4 +1,4 @@
-#![feature(panic_info_message, custom_test_frameworks, fn_align)]
+#![feature(asm_const, custom_test_frameworks, fn_align, panic_info_message)]
 #![reexport_test_harness_main = "test_entry_point"]
 #![test_runner(language_items::test_runner)]
 #![no_std]
@@ -33,7 +33,7 @@ fn user_func() {
         loop {
             i = i.wrapping_add(1);
 
-            if i == 0x100000 {
+            if i == 0x12456 {
                 asm!("ecall");
             }
         }
@@ -59,7 +59,7 @@ extern "C" fn kernel_main() {
     test_entry_point();
 
     let mut proc = process::Process::new(user_func);
-    println!("{proc:?}");
+    println!("{proc:#?}");
     proc.run();
 
     loop {

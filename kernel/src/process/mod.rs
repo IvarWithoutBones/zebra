@@ -5,11 +5,28 @@ use {
         PAGE_SIZE,
     },
     alloc::boxed::Box,
-    core::fmt,
+    core::{arch::global_asm, fmt},
 };
 
+extern "C" {
+    fn user_enter(trap_frame: usize, trampoline: usize);
+}
+
 const PROGRAM_START: usize = 0x2000_0000;
-const STACK_PAGES: usize = 4 * PAGE_SIZE;
+const USER_STACK_PAGES: usize = 4 * PAGE_SIZE;
+const TRAPFRAME_ADDR: usize = 0x1000;
+
+global_asm!(include_str!("context_switch.s"), TRAPFRAME_ADDR = const TRAPFRAME_ADDR);
+
+#[repr(C)]
+#[derive(Default)]
+struct TrapFrame {
+    user_satp: usize,
+    kernel_satp: usize,
+    kernel_trap_vector: usize,
+    program_counter: usize,
+    stack_pointer: usize,
+}
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -24,19 +41,19 @@ enum ProcessState {
 pub struct Process {
     state: ProcessState,
     pid: usize,
-    stack: *mut u8,
-    pub program_counter: usize,
     page_table: Box<page::Table>,
-}
-
-extern "C" {
-    fn user_enter(pc: *const u8, sp: *const u8, satp: usize, trampoline: usize);
+    trap_frame: Box<TrapFrame>,
 }
 
 impl Process {
     pub fn new(func: fn()) -> Self {
-        let stack = { allocator().allocate(STACK_PAGES).unwrap() };
+        let stack = { allocator().allocate(USER_STACK_PAGES).unwrap() };
         let mut page_table = page::Table::new();
+
+        let mut trap_frame = Box::<TrapFrame>::default();
+        trap_frame.user_satp = page_table.build_satp();
+        trap_frame.program_counter = PROGRAM_START;
+        trap_frame.stack_pointer = unsafe { stack.add(PAGE_SIZE * USER_STACK_PAGES) } as _;
 
         // Map the initialisation code so that we can enter user mode after switching to the new page table
         page_table.identity_map(
@@ -46,7 +63,7 @@ impl Process {
         );
 
         // Map the users stack
-        for page in 0..STACK_PAGES {
+        for page in 0..USER_STACK_PAGES {
             page_table.map_page(
                 stack as usize + (PAGE_SIZE * page),
                 stack as usize + (PAGE_SIZE * page),
@@ -64,30 +81,34 @@ impl Process {
         // Map the trampoline
         map_trampoline(&mut page_table);
 
+        // Map the trap frame
+        page_table.map_page(
+            TRAPFRAME_ADDR,
+            trap_frame.as_mut() as *mut _ as usize,
+            page::EntryAttributes::ReadWrite,
+        );
+
         Self {
             state: ProcessState::Waiting,
             pid: 0,
-            stack: unsafe { stack.add(PAGE_SIZE * STACK_PAGES) },
-            program_counter: PROGRAM_START,
             page_table: Box::new(page_table),
+            trap_frame,
         }
     }
 
     pub fn run(&mut self) {
         unsafe {
             user_enter(
-                self.program_counter as _,
-                self.stack,
-                self.page_table.build_satp(),
+                self.trap_frame.as_mut() as *mut _ as usize,
                 trampoline_start(),
             );
         }
     }
 }
 
-impl Drop for Process {
+impl Drop for TrapFrame {
     fn drop(&mut self) {
-        allocator().deallocate(self.stack);
+        allocator().deallocate(self.stack_pointer as _);
     }
 }
 
@@ -96,9 +117,8 @@ impl fmt::Debug for Process {
         f.debug_struct("Process")
             .field("state", &self.state)
             .field("pid", &self.pid)
-            .field("stack", &(&self.stack as *const _))
-            .field("program_counter", &(&self.program_counter as *const _))
             .field("page_table", &(&self.page_table as *const _))
+            .field("trap_frame", &(&self.trap_frame as *const _))
             .finish_non_exhaustive()
     }
 }

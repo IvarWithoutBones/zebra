@@ -41,7 +41,7 @@ section!(trampoline_end, _trampoline_end);
 
 /// Map the trampoline section into the given page table.
 pub fn map_trampoline(page_table: &mut page::Table) {
-    assert!(trampoline_end() - trampoline_start() <= PAGE_SIZE);
+    assert!(trampoline_end() - trampoline_start() == PAGE_SIZE);
 
     // TODO: really should not be identity mapped
     page_table.map_page(

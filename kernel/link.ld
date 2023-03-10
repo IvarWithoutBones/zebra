@@ -18,17 +18,16 @@ SECTIONS {
     .text : {
         PROVIDE(_text_start = .);
 
-        /* Entry point, must match up with `ram.ORIGIN` */
-        *(.text.init)
+        *(.text.init) /* Entry point, must match up with `ram.ORIGIN` */
+        *(.text .text.*)
 
-        /* Trampoline page, must be aligned to a page boundary */
+        /* Trampoline code, must be page aligned */
         . = ALIGN(0x1000);
         PROVIDE(_trampoline_start = .);
         *(.trampoline)
+        . = ALIGN(0x1000);
         PROVIDE(_trampoline_end = .);
-
-        /* Remaining code */
-        *(.text .text.*)
+        ASSERT(_trampoline_end - _trampoline_start == 0x1000, "trampoline is not page sized")
 
         PROVIDE(_text_end = .);
     } >ram AT>ram :text
