@@ -121,11 +121,11 @@ impl Table {
     fn map(&mut self, vaddr: usize, paddr: usize, flags: EntryAttributes, level: usize) {
         assert!(
             paddr % PAGE_SIZE == 0,
-            "physical address unaligned: {paddr:#x}"
+            "physical address misaligned: {paddr:#x}"
         );
         assert!(
             vaddr % PAGE_SIZE == 0,
-            "virtual address unaligned: {vaddr:#x}"
+            "virtual address misaligned: {vaddr:#x}"
         );
         assert!(level <= 2, "invalid level: {level}");
 

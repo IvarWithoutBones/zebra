@@ -26,12 +26,7 @@ impl<T> Spinlock<T> {
     pub fn lock(&self) -> SpinlockGuard<T> {
         // Disable interrupts
         unsafe {
-            let sstatus = {
-                let sstatus: usize;
-                asm!("csrr {}, sstatus", out(reg) sstatus);
-                sstatus
-            };
-            asm!("csrw sstatus, {}", in(reg) sstatus & !(1 << 1));
+            asm!("csrc sstatus, {}", in(reg) 1 << 1);
         }
 
         while self
@@ -78,12 +73,7 @@ impl<'a, T> Drop for SpinlockGuard<'a, T> {
 
         // Enable interrupts
         unsafe {
-            let sstatus = {
-                let sstatus: usize;
-                asm!("csrr {}, sstatus", out(reg) sstatus);
-                sstatus
-            };
-            asm!("csrw sstatus, {}", in(reg) sstatus | 1 << 1);
+            asm!("csrs sstatus, {}", in(reg) 1 << 1);
         }
     }
 }

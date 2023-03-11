@@ -1,5 +1,5 @@
 .align 4
-.section .rodata.vectors
+.section .text.vectors
 .global supervisor_trap_vector
 supervisor_trap_vector:
     # Make room for all our registers on the stack
@@ -79,7 +79,7 @@ supervisor_trap_vector:
     sret
 
 .align 4
-.section .rodata.vectors
+.section .text.vectors
 .global machine_trap_vector
 machine_trap_vector:
     # Save the registers we will use

@@ -27,15 +27,21 @@ fn user_func() {
     unsafe {
         asm!("li t0, 0xdeadbeef");
 
+        let mut a = false;
         #[allow(unused_variables)]
-        let mut i: usize = 0;
+        let mut i: u8 = 0;
 
         loop {
-            i = i.wrapping_add(1);
-
-            if i == 0x12456 {
-                asm!("ecall");
+            if i == u8::MAX {
+                if a {
+                    asm!("li t0, 0xdeadbeef");
+                } else {
+                    asm!("li t0, 0xcafeface");
+                }
+                a = !a;
             }
+
+            i = i.wrapping_add(1);
         }
     }
 }
@@ -47,10 +53,9 @@ extern "C" fn kernel_main() {
     unsafe {
         trap::attach_supervisor_trap_vector();
         memory::init();
-        trap::plic::set_global_threshold(u3::new(5));
+        trap::plic::set_global_threshold(u3::new(0));
         trap::plic::add_device::<uart::NS16550a>();
-        // TODO: breaks because we never switch back from the users page table
-        // trap::enable_interrupts();
+        trap::enable_interrupts();
     }
 
     // Start executing the reexported test harness's entry point.

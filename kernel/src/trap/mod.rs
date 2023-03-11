@@ -2,7 +2,7 @@ mod clint;
 pub mod plic;
 
 use {
-    crate::{memory::page, uart},
+    crate::{memory::page, process, uart},
     core::{
         arch::{asm, global_asm},
         fmt::Debug,
@@ -70,7 +70,7 @@ impl Interrupt {
             Self::SupervisorSoftware => {
                 // Clear the interrupt pending bit
                 unsafe { asm!("csrc sip, 2") }
-                println!("timer interrupt");
+                // println!("timer interrupt");
             }
 
             _ => panic!("unhandled interrupt: {self:?}"),
@@ -186,35 +186,32 @@ impl From<usize> for Trap {
     }
 }
 
+#[no_mangle]
+extern "C" fn user_trap_handler(cause: usize) {
+    let trap = Trap::from(cause);
+    if let Trap::Interrupt(trap) = trap {
+        trap.handle();
+        process::switch_to_process();
+    } else {
+        // Should kill the process in the future
+        panic!("unhandled trap from user mode: {trap:?}");
+    }
+}
+
 /// The trap handler for Supervisor mode. This will be called by the respective
 /// trap vector after the previous execution context has been saved, and after we
 /// return from this function we will restore and resume the previous execution context.
 #[no_mangle]
-extern "C" fn supervisor_trap_handler() {
-    let sepc = unsafe {
-        let value: usize;
-        asm!("csrr {}, sepc", lateout(reg) value);
-        value
-    };
-
-    let sstatus = unsafe {
-        let value: usize;
-        asm!("csrr {}, sstatus", lateout(reg) value);
-        value
-    };
-
-    let cause = unsafe {
-        let cause: usize;
-        asm!("csrr {}, scause", lateout(reg) cause);
-        cause
+extern "C" fn supervisor_trap_handler(cause: usize) {
+    unsafe {
+        asm!("csrw sie, zero");
     };
 
     Trap::from(cause).handle();
 
     unsafe {
-        asm!("csrw sepc, {}", in(reg) sepc);
-        asm!("csrw sstatus, {}", in(reg) sstatus);
-    }
+        asm!("csrs sie, {}", in(reg) 1 << 9 | 1 << 5 | 1 << 1);
+    };
 }
 
 #[no_mangle]
