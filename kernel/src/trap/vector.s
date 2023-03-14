@@ -38,6 +38,7 @@ supervisor_trap_vector:
     sd a7, 248(sp)
 
     # Call the kernels trap handler
+    csrr a0, scause
     call supervisor_trap_handler
 
     # Restore all our registers

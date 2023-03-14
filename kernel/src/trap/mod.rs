@@ -70,7 +70,6 @@ impl Interrupt {
             Self::SupervisorSoftware => {
                 // Clear the interrupt pending bit
                 unsafe { asm!("csrc sip, 2") }
-                // println!("timer interrupt");
             }
 
             _ => panic!("unhandled interrupt: {self:?}"),
@@ -191,11 +190,14 @@ extern "C" fn user_trap_handler(cause: usize) {
     let trap = Trap::from(cause);
     if let Trap::Interrupt(trap) = trap {
         trap.handle();
-        process::switch_to_process();
     } else {
-        // Should kill the process in the future
-        panic!("unhandled trap from user mode: {trap:?}");
+        process::scheduler::PROCESSES.lock_with(|procs| {
+            let offender = procs.remove_current().unwrap().pid;
+            println!("killing process {offender} because of an unhandled exception: {trap:?}");
+        });
     }
+
+    process::scheduler::schedule();
 }
 
 /// The trap handler for Supervisor mode. This will be called by the respective

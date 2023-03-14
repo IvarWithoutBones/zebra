@@ -3,16 +3,15 @@
 #[cfg(test)]
 use core::any::type_name;
 use {
-    super::power,
-    core::{arch::asm, panic::PanicInfo},
+    crate::{power, uart::UART},
+    core::{arch::asm, fmt::Write, panic::PanicInfo},
 };
 
 /// Printing function that uses the UART to print to standard output.
 pub fn print(with_newline: bool, args: ::core::fmt::Arguments) {
-    use ::core::fmt::Write;
-    crate::uart::UART.lock_with(|uart| {
+    UART.lock_with(|uart| {
         if with_newline {
-            write!(uart, "{}\r\n", args).unwrap();
+            writeln!(uart, "{}", args).unwrap();
         } else {
             write!(uart, "{}", args).unwrap();
         }

@@ -25,10 +25,7 @@ global_asm!(include_str!("./asm/entry.s"));
 #[repr(align(4096))]
 fn user_func() {
     unsafe {
-        asm!("li t0, 0xdeadbeef");
-
         let mut a = false;
-        #[allow(unused_variables)]
         let mut i: u8 = 0;
 
         loop {
@@ -38,7 +35,24 @@ fn user_func() {
                 } else {
                     asm!("li t0, 0xcafeface");
                 }
+
                 a = !a;
+            }
+
+            i = i.wrapping_add(1);
+        }
+    }
+}
+
+#[repr(align(4096))]
+fn user_func_two() {
+    unsafe {
+        let mut i: u32 = 0;
+
+        loop {
+            asm!("li t0, 0xbaadf00d");
+            if i == u32::MAX / 20 {
+                asm!("ecall");
             }
 
             i = i.wrapping_add(1);
@@ -63,11 +77,14 @@ extern "C" fn kernel_main() {
     #[cfg(test)]
     test_entry_point();
 
-    let mut proc = process::Process::new(user_func);
-    println!("{proc:#?}");
-    proc.run();
+    let proc = process::Process::new(user_func);
+    println!("\n{proc:#?}\n");
+    process::scheduler::insert(proc);
 
-    loop {
-        unsafe { asm!("wfi") }
-    }
+    let proc_two = process::Process::new(user_func_two);
+    println!("\n{proc_two:#?}\n");
+    process::scheduler::insert(proc_two);
+
+    println!("starting scheduler");
+    process::scheduler::schedule();
 }

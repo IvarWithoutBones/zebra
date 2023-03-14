@@ -2,6 +2,9 @@
 .section .trampoline
 .global user_trap_vector
 user_trap_vector:
+    # Disable interrupts
+    csrw sie, zero
+
     # Save the users a0 since we'll need to use it
     csrw sscratch, a0
 
@@ -38,21 +41,23 @@ user_trap_vector:
     sd s8, 256(a0)
     sd s9, 264(a0)
 
-    # Save the users program counter
-    csrr t0, sepc
-    sd t0, 32(a0)
-
-    # Load the kernels registers
-    ld t1, 8(a0) # Kernel trap handler
-    ld sp, 16(a0) # Kernel stack pointer
-
     # Save the users a0
     csrr t0, sscratch
     sd t0, 72(a0)
 
+    # Save the users program counter
+    csrr t0, sepc
+    sd t0, 32(a0)
+
     # Save the users SATP
     csrr t0, satp
     sd t0, 24(a0)
+
+    # Kernels stack pointer, will never change as there is no need to preserve any context between traps.
+    ld sp, 16(a0)
+
+    # Kernel trap handler
+    ld t1, 8(a0)
 
     # Switch to the kernels page table, a0 will be invalid afterwards
     ld t0, 0(a0) # Kernel SATP
@@ -68,19 +73,9 @@ user_trap_vector:
 user_enter:
     # a0: pointer to a TrapFrame
 
-    li ra, 0 # avoid confusion
-
-    # Store the kernels SATP
+    # Store the kernels page table
     csrr t0, satp
     sd t0, 0(a0)
-
-    # Store the kernels trap vector
-    la t0, user_trap_handler
-    sd t0, 8(a0)
-
-    # TODO: doing this breaks things, presumably overflow?
-    # Store the kernels stack pointer
-    # sd sp, 16(a0)
 
     # Switch to the users page table
     ld a0, 24(a0)
@@ -91,7 +86,15 @@ user_enter:
     la t0, user_trap_vector
     csrw stvec, t0
 
+    # Enable interrupts
+    li t0, 1 << 9 | 1 << 5 | 1 << 1
+    csrw sie, t0
+
     li a0, {TRAPFRAME_ADDR}
+
+    # Store the kernels trap handler
+    la t0, user_trap_handler
+    sd t0, 8(a0)
 
     # Load the users program counter
     ld t0, 32(a0)

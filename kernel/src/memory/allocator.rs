@@ -47,7 +47,7 @@ impl Allocator {
     }
 
     fn offset_page_of(&self, ptr: *mut u8) -> usize {
-        (ptr as usize - self.base_addr) / PAGE_SIZE
+        (ptr as usize).saturating_sub(self.base_addr) / PAGE_SIZE
     }
 
     pub fn allocate(&mut self, size: usize) -> Option<*mut u8> {
