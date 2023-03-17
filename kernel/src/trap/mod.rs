@@ -190,11 +190,13 @@ extern "C" fn user_trap_handler(cause: usize) {
     let trap = Trap::from(cause);
     if let Trap::Interrupt(trap) = trap {
         trap.handle();
+    } else if trap == Trap::Exception(Exception::UserEnvironmentCall) {
+        process::syscall::handle();
     } else {
         process::scheduler::PROCESSES.lock_with(|procs| {
             let offender = procs.remove_current().unwrap().pid;
-            println!("killing process {offender} because of an unhandled exception: {trap:?}");
-        });
+            println!("killed process {offender} because of an unhandled trap: {trap:?}");
+        })
     }
 
     process::scheduler::schedule();

@@ -51,16 +51,15 @@ pub fn insert(process: Process) {
 pub fn schedule() -> ! {
     // We need a reference to the process that remains valid *after* dropping the PROCESSES lock,
     // should probably use a smart pointer instead of the unsafe raw pointer.
-    let next_proc = PROCESSES.lock_with(|procs| {
-        if let Some(current) = procs.current() {
-            current.state = ProcessState::Waiting;
-        }
+    PROCESSES
+        .lock_with(|procs| {
+            if let Some(current) = procs.current() {
+                current.state = ProcessState::Waiting;
+            }
 
-        let next_proc: *mut Process =
-            procs.next().expect("no processes to schedule") as *const _ as _;
-        unsafe { &mut *next_proc }
-    });
-
-    println!("switching to pid {}", next_proc.pid);
-    next_proc.run()
+            let next_proc: *mut Process =
+                procs.next().expect("no processes to schedule") as *const _ as _;
+            unsafe { &mut *next_proc }
+        })
+        .run()
 }

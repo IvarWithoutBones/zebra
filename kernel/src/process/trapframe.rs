@@ -1,55 +1,72 @@
 use {super::PROGRAM_START, alloc::boxed::Box, core::fmt};
 
+/// NOTE: Numbering *must* match with the serialisation/deserialisation in `context_switch.s`!
+#[repr(u64)]
+#[allow(dead_code)]
+pub enum Registers {
+    Satp = 0,
+    ProgramCounter = 1,
+    StackPointer = 2,
+    ReturnAddress = 3,
+    GlobalPointer = 4,
+    ThreadPointer = 5,
+
+    A0 = 6,
+    A1 = 7,
+    A2 = 8,
+    A3 = 9,
+    A4 = 10,
+    A5 = 11,
+    A6 = 12,
+    A7 = 13,
+
+    T0 = 14,
+    T1 = 15,
+    T2 = 16,
+    T3 = 17,
+    T4 = 18,
+    T5 = 19,
+    T6 = 20,
+
+    S0 = 21,
+    S1 = 22,
+    S2 = 23,
+    S3 = 24,
+    S4 = 25,
+    S5 = 26,
+    S6 = 27,
+    S7 = 28,
+    S8 = 29,
+    S9 = 30,
+}
+
+impl Registers {
+    pub const fn len() -> usize {
+        30
+    }
+}
+
 #[repr(C)]
 #[derive(Default)]
 pub struct TrapFrame {
+    // Kernel state
     kernel_satp: u64,
     kernel_trap_vector: u64,
     kernel_stack_pointer: u64,
-
-    satp: u64,
-    program_counter: u64,
-    stack_pointer: u64,
-    return_address: u64,
-    global_pointer: u64,
-    thread_pointer: u64,
-
-    a0: u64,
-    a1: u64,
-    a2: u64,
-    a3: u64,
-    a4: u64,
-    a5: u64,
-    a6: u64,
-    a7: u64,
-
-    t0: u64,
-    t1: u64,
-    t2: u64,
-    t3: u64,
-    t4: u64,
-    t5: u64,
-    t6: u64,
-
-    s0: u64,
-    s1: u64,
-    s2: u64,
-    s3: u64,
-    s4: u64,
-    s5: u64,
-    s6: u64,
-    s7: u64,
-    s8: u64,
-    s9: u64,
+    // User state
+    pub registers: [u64; Registers::len()],
 }
 
 impl TrapFrame {
     pub fn new(user_satp: u64, stack_pointer: u64, kernel_stack_pointer: u64) -> Box<Self> {
+        let mut registers = [0; Registers::len()];
+        registers[Registers::Satp as usize] = user_satp;
+        registers[Registers::StackPointer as usize] = stack_pointer;
+        registers[Registers::ProgramCounter as usize] = PROGRAM_START as _;
+
         Box::new(Self {
-            stack_pointer,
             kernel_stack_pointer,
-            satp: user_satp,
-            program_counter: PROGRAM_START as _,
+            registers,
             ..Default::default()
         })
     }
@@ -63,10 +80,13 @@ impl fmt::Debug for TrapFrame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TrapFrame")
             .field("pointer", &self.as_ptr())
-            .field("user_satp", &format_args!("{:#X}", self.satp))
+            .field(
+                "user_satp",
+                &format_args!("{:#X}", self.registers[Registers::Satp as usize]),
+            )
             .field(
                 "program_counter",
-                &format_args!("{:#X}", self.program_counter),
+                &format_args!("{:#X}", self.registers[Registers::ProgramCounter as usize]),
             )
             .finish_non_exhaustive()
     }

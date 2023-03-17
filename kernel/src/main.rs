@@ -47,15 +47,12 @@ fn user_func() {
 #[repr(align(4096))]
 fn user_func_two() {
     unsafe {
-        let mut i: u32 = 0;
-
+        let mut i = 0;
         loop {
-            asm!("li t0, 0xbaadf00d");
-            if i == u32::MAX / 20 {
-                asm!("ecall");
-            }
+            asm!("li a7, 2"); // SystemCall::Print
+            asm!("ecall", in("a0") b"a"[0] + i);
 
-            i = i.wrapping_add(1);
+            i += 1;
         }
     }
 }

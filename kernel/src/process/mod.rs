@@ -1,5 +1,6 @@
 pub mod scheduler;
-mod trapframe;
+pub mod syscall;
+pub mod trapframe;
 
 use {
     self::trapframe::TrapFrame,
@@ -39,7 +40,7 @@ pub struct Process {
     state: ProcessState,
     pub pid: usize,
     page_table: Box<page::Table>,
-    trap_frame: Box<TrapFrame>,
+    pub trap_frame: Box<TrapFrame>,
 }
 
 impl Process {
