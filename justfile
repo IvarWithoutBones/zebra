@@ -38,17 +38,15 @@ format:
 # Run all checks
 check:
     just --unstable --check --fmt
-    @echo "passed"
 
     @echo "$(tput bold)nil diagnostics ...$(tput sgr0)"
     @find . -type f -name "*.nix" -print0 | xargs -0 -n1 nil diagnostics
-    @echo "passed"
 
     @echo "$(tput bold)nixpkgs-fmt --check ...$(tput sgr0)"
     @nixpkgs-fmt --check $(find . -type f -name "*.nix")
 
-    cargo check
     cargo fmt -- --check
+    cargo check
     cargo clippy -- -D warnings
     cargo test
     @echo "tests passed"
