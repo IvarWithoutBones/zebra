@@ -6,6 +6,7 @@
 
 #[macro_use]
 mod language_items;
+mod fairy;
 mod memory;
 mod power;
 mod process;
@@ -66,6 +67,9 @@ extern "C" fn kernel_main() {
         memory::init();
         trap::plic::set_global_threshold(u3::new(0));
         trap::plic::add_device::<uart::NS16550a>();
+
+        // No needs for interrupts in non-integration tests
+        #[cfg(not(test))]
         trap::enable_interrupts();
     }
 

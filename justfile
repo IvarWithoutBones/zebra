@@ -52,7 +52,7 @@ check:
     @echo "tests passed"
 
 # Run the kernel in QEMU
-run kernel_path=(kernel_image_path):
+run kernel_path=(kernel_image_path) *args="":
     qemu-system-riscv64 \
         -machine virt \
         -cpu rv64 \

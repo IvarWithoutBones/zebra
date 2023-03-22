@@ -6,3 +6,7 @@ edition = "2021"
 [dependencies]
 arbitrary-int = "1.2.3"
 bitbybit = "1.1.2"
+
+[dependencies.binrw]
+version = "0.11.1"
+default-features = false
