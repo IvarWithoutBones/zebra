@@ -43,12 +43,12 @@ const fn align_down(val: usize, order: usize) -> usize {
 }
 
 /// Align an address to the end of a page.
-const fn align_page_up(val: usize) -> usize {
+pub const fn align_page_up(val: usize) -> usize {
     align_up(val, PAGE_ORDER)
 }
 
 /// Align an address to the begin of a page.
-const fn align_page_down(val: usize) -> usize {
+pub const fn align_page_down(val: usize) -> usize {
     align_down(val, PAGE_ORDER)
 }
 

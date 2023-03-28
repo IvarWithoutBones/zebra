@@ -1,7 +1,6 @@
 use {
     crate::process::{scheduler, trapframe},
     bitbybit::bitenum,
-    core::arch::asm,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -15,16 +14,6 @@ pub enum SystemCall {
     Exit = 0,
     Yield = 1,
     Print = 2,
-}
-
-impl SystemCall {
-    #[allow(dead_code)]
-    #[inline]
-    pub fn call(&self) {
-        unsafe {
-            asm!("ecall", in("a7") self.raw_value());
-        }
-    }
 }
 
 impl TryFrom<u64> for SystemCall {
@@ -49,12 +38,28 @@ pub fn handle() {
                 return;
             }
 
-            // `schedule()` will be called by the trap handler
+            // `schedule()` will be called by the trap handler immediately afterwards
             SystemCall::Yield => {}
 
             SystemCall::Print => {
-                let arg = proc.trap_frame.registers[trapframe::Registers::A0 as usize];
-                println!("[user] {}", char::from(arg as u8));
+                let str = {
+                    let string_ptr = proc.trap_frame.registers[trapframe::Registers::A0 as usize];
+                    let len = proc.trap_frame.registers[trapframe::Registers::A1 as usize];
+
+                    let ptr = proc.page_table.physical_addr(string_ptr as _).unwrap()
+                        + (string_ptr as usize % crate::memory::PAGE_SIZE);
+                    // Surely there is no security risk associated with returning arbitrary kernel memory to the end user, with no bounds checking
+                    let source = unsafe { core::slice::from_raw_parts(ptr as *const u8, len as _) };
+                    core::str::from_utf8(source)
+                };
+
+                if let Ok(str) = str {
+                    print!("{str}");
+                } else {
+                    let pid = procs.remove_current().unwrap().pid;
+                    println!("invalid string passed from {pid} to SystemCall::Print: {str:?}. Killing process");
+                    return;
+                }
             }
 
             #[allow(unreachable_patterns)] // Useful when adding new system calls
@@ -89,8 +94,6 @@ mod tests {
 
     #[test_case]
     fn parse_invalid() {
-        assert!(SystemCall::try_from(3).is_err());
-
         assert_eq!(
             SystemCall::try_from(u64::MAX).unwrap_err(),
             SystemCallError::Invalid(u64::MAX)

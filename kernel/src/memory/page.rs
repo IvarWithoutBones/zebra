@@ -37,6 +37,7 @@ pub enum EntryAttributes {
     ReadWriteExecute = 1 << 1 | 1 << 2 | 1 << 3,
 
     // User Convenience Combinations
+    UserRead = 1 << 1 | 1 << 4,
     UserReadWrite = 1 << 1 | 1 << 2 | 1 << 4,
     UserReadExecute = 1 << 1 | 1 << 3 | 1 << 4,
 }
@@ -118,7 +119,7 @@ impl Table {
         (self as *const _ as usize / PAGE_SIZE) | (MODE << 60)
     }
 
-    fn map(&mut self, vaddr: usize, paddr: usize, flags: EntryAttributes, level: usize) {
+    fn map_addr(&mut self, vaddr: usize, paddr: usize, flags: EntryAttributes, level: usize) {
         assert!(
             paddr % PAGE_SIZE == 0,
             "physical address misaligned: {paddr:#x}"
@@ -155,14 +156,14 @@ impl Table {
     }
 
     pub fn map_page(&mut self, vaddr: usize, paddr: usize, flags: EntryAttributes) {
-        self.map(vaddr, paddr, flags, 0);
+        self.map_addr(vaddr, paddr, flags, 0);
     }
 
     pub fn identity_map(&mut self, start: usize, end: usize, flags: EntryAttributes) {
         let mut addr = align_page_down(start);
         let num_kb_pages = (align_page_up(end) - addr) / PAGE_SIZE;
         for _ in 0..num_kb_pages {
-            self.map(addr, addr, flags.clone(), 0);
+            self.map_addr(addr, addr, flags.clone(), 0);
             addr += PAGE_SIZE;
         }
     }
@@ -179,8 +180,8 @@ impl Table {
             // Get the next level
             v = unsafe {
                 // We need volatile as this gets optimized out otherwise
-                let entry: *const Entry = read_volatile(&v.paddr() as *const _) as _;
-                entry.add(vpn.index(lvl)).as_ref().unwrap()
+                let entry: *mut Entry = read_volatile(&v.paddr() as *const _) as _;
+                entry.add(vpn.index(lvl)).as_mut().unwrap()
             };
         }
 

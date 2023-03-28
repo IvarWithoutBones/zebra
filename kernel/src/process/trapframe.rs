@@ -1,6 +1,9 @@
-use {super::PROGRAM_START, alloc::boxed::Box, core::fmt};
+use bitbybit::bitenum;
+use {alloc::boxed::Box, core::fmt};
 
 /// NOTE: Numbering *must* match with the serialisation/deserialisation in `context_switch.s`!
+#[bitenum(u64)]
+#[derive(Debug)]
 #[repr(u64)]
 #[allow(dead_code)]
 pub enum Registers {
@@ -62,7 +65,6 @@ impl TrapFrame {
         let mut registers = [0; Registers::len()];
         registers[Registers::Satp as usize] = user_satp;
         registers[Registers::StackPointer as usize] = stack_pointer;
-        registers[Registers::ProgramCounter as usize] = PROGRAM_START as _;
 
         Box::new(Self {
             kernel_stack_pointer,
@@ -89,5 +91,18 @@ impl fmt::Debug for TrapFrame {
                 &format_args!("{:#X}", self.registers[Registers::ProgramCounter as usize]),
             )
             .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Display for TrapFrame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "TrapFrame {{")?;
+        for (i, data) in self.registers.iter().enumerate() {
+            let reg = Registers::new_with_raw_value(i as u64).unwrap();
+            writeln!(f, "    {:?}: {:#X}", reg, data)?;
+        }
+        writeln!(f, "}}")?;
+
+        Ok(())
     }
 }

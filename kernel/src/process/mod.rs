@@ -13,7 +13,6 @@ use {
     },
 };
 
-const PROGRAM_START: usize = 0x2000_0000;
 const STACK_SIZE: usize = 4 * PAGE_SIZE;
 const TRAPFRAME_ADDR: usize = 0x1000;
 
@@ -44,7 +43,7 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn new(func: fn()) -> Self {
+    pub fn new() -> Self {
         let user_stack = { allocator().allocate(STACK_SIZE).unwrap() };
         // Used when trapping into the kernel, desperately needs a guard page.
         let kernel_stack = { allocator().allocate(STACK_SIZE).unwrap() };
@@ -66,20 +65,18 @@ impl Process {
             );
         }
 
-        // Map the users program
-        page_table.map_page(
-            PROGRAM_START,
-            func as usize,
-            page::EntryAttributes::UserReadExecute,
-        );
-
         map_trampoline(&mut page_table);
 
-        let trap_frame = TrapFrame::new(
+        // Map the users program
+        let entry = crate::fairy::load_elf(&mut page_table);
+
+        let mut trap_frame = TrapFrame::new(
             page_table.build_satp() as _,
             unsafe { user_stack.add(STACK_SIZE) } as _,
             unsafe { kernel_stack.add(STACK_SIZE) } as _,
         );
+
+        trap_frame.registers[trapframe::Registers::ProgramCounter as usize] = entry;
 
         // Map the trap frame
         page_table.map_page(

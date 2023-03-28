@@ -1,0 +1,11 @@
+[package]
+name = "librs"
+version = "0.1.0"
+edition = "2021"
+links = "zebra-librs"
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+bitbybit = "1.1.3"

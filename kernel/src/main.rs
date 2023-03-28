@@ -16,47 +16,9 @@ mod uart;
 
 extern crate alloc;
 
-use {
-    arbitrary_int::u3,
-    core::arch::{asm, global_asm},
-};
+use {arbitrary_int::u3, core::arch::global_asm};
 
 global_asm!(include_str!("./asm/entry.s"));
-
-#[repr(align(4096))]
-fn user_func() {
-    unsafe {
-        let mut a = false;
-        let mut i: u8 = 0;
-
-        loop {
-            if i == u8::MAX {
-                if a {
-                    asm!("li t0, 0xdeadbeef");
-                } else {
-                    asm!("li t0, 0xcafeface");
-                }
-
-                a = !a;
-            }
-
-            i = i.wrapping_add(1);
-        }
-    }
-}
-
-#[repr(align(4096))]
-fn user_func_two() {
-    unsafe {
-        let mut i = 0;
-        loop {
-            asm!("li a7, 2"); // SystemCall::Print
-            asm!("ecall", in("a0") b"a"[0] + i);
-
-            i += 1;
-        }
-    }
-}
 
 #[no_mangle]
 extern "C" fn kernel_main() {
@@ -78,13 +40,9 @@ extern "C" fn kernel_main() {
     #[cfg(test)]
     test_entry_point();
 
-    let proc = process::Process::new(user_func);
+    let proc = process::Process::new();
     println!("\n{proc:#?}\n");
     process::scheduler::insert(proc);
-
-    let proc_two = process::Process::new(user_func_two);
-    println!("\n{proc_two:#?}\n");
-    process::scheduler::insert(proc_two);
 
     println!("starting scheduler");
     process::scheduler::schedule();

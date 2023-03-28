@@ -1,2 +1,2 @@
 [workspace]
-members = ["kernel"]
+members = ["kernel", "librs", "test-bin"]
