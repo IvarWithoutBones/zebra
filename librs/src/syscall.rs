@@ -1,35 +1,44 @@
-use bitbybit::bitenum;
 use core::arch::asm;
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum SystemCallError {
-    Invalid(u64),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-#[bitenum(u64)]
 pub enum SystemCall {
     Exit = 0,
     Yield = 1,
     Print = 2,
+    Read = 3,
 }
 
-impl TryFrom<u64> for SystemCall {
-    type Error = SystemCallError;
-
-    fn try_from(value: u64) -> Result<Self, Self::Error> {
-        Self::new_with_raw_value(value).map_err(SystemCallError::Invalid)
-    }
-}
-
+/// Exit the current process.
 pub fn exit() -> ! {
     unsafe {
         asm!("ecall", in("a7") SystemCall::Exit as usize, options(noreturn));
     }
 }
 
+/// Yield the current time slice to another process.
+pub fn yield_proc() {
+    unsafe {
+        asm!("ecall", in("a7") SystemCall::Yield as usize);
+    }
+}
+
+/// Print a string to standard output.
 pub fn print(s: &str) {
     unsafe {
         asm!("ecall", in("a7") SystemCall::Print as usize, in("a0") s.as_ptr(), in("a1") s.len());
+    }
+}
+
+/// Read a single character from standard input, or `None` if there is no input.
+pub fn read() -> Option<char> {
+    let result: usize;
+    unsafe {
+        asm!("ecall", in("a7") SystemCall::Read as usize, out("a0") result);
+    }
+
+    if result == 0 {
+        None
+    } else {
+        core::char::from_u32(result as _)
     }
 }

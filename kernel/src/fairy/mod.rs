@@ -23,13 +23,12 @@ pub fn load_elf(page_table: &mut memory::page::Table) -> u64 {
     let mut cursor = binrw::io::Cursor::new(BINARY);
     let header = header::Header::try_from(&mut cursor).unwrap();
     assert_eq!(header.identifier.class, header::Class::Bits64);
-    println!("\n\n{header:#?}\n");
+    println!("\nloading ELF {header:#?}\n");
 
     cursor.set_position(header.primary.program_header_start_64.unwrap() as _);
     for _ in 0..header.primary.program_header_entry_count {
         let program =
             program::ProgramHeader::read_options(&mut cursor, header.endianness(), ()).unwrap();
-        println!("{program:#?}\n");
 
         if program.program_type == program::ProgramType::Loadable {
             let pages_needed = memory::align_page_up(program.file_size as _) / memory::PAGE_SIZE;
@@ -58,9 +57,9 @@ pub fn load_elf(page_table: &mut memory::page::Table) -> u64 {
                     program.flags.as_page_attributes(),
                 );
             }
-            println!("done with program header\n");
         }
     }
 
+    println!("finished mapping ELF!");
     header.primary.entry_point_64.unwrap()
 }

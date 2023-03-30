@@ -194,10 +194,16 @@ extern "C" fn user_trap_handler(cause: usize) {
         process::syscall::handle();
     } else {
         process::scheduler::PROCESSES.lock_with(|procs| {
+            let stval = unsafe {
+                let value: usize;
+                asm!("csrr {}, stval", lateout(reg) value);
+                value
+            };
+
             let offender = procs.remove_current().unwrap();
             let pid = offender.pid;
             let trap_frame = offender.trap_frame;
-            println!("killed process {pid} because of an unhandled trap: {trap:?}:\n{trap_frame}");
+            println!("killed process {pid} because of an unhandled trap: {trap:?} at {stval:#x}:\n{trap_frame}");
         })
     }
 

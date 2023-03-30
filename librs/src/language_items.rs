@@ -5,15 +5,7 @@ use core::{
     panic::PanicInfo,
 };
 
-pub fn print(with_newline: bool, args: ::core::fmt::Arguments) {
-    if with_newline {
-        writeln!(StandardOutput, "{args}").unwrap();
-    } else {
-        write!(StandardOutput, "{args}").unwrap();
-    }
-}
-
-struct StandardOutput;
+pub struct StandardOutput;
 
 impl Write for StandardOutput {
     fn write_str(&mut self, s: &str) -> fmt::Result {
@@ -21,23 +13,34 @@ impl Write for StandardOutput {
         Ok(())
     }
 }
-/// Printing helper that use the UART to print to standard output, with a newline.
+
+impl StandardOutput {
+    pub fn print(with_newline: bool, args: ::core::fmt::Arguments) {
+        if with_newline {
+            writeln!(StandardOutput, "{args}").unwrap();
+        } else {
+            write!(StandardOutput, "{args}").unwrap();
+        }
+    }
+}
+
+/// Printing helper to print to standard output, with a newline.
 #[macro_export]
 macro_rules! println {
     ($($args:tt)+) => {{
-        $crate::language_items::print(true, format_args!($($args)+));
+        $crate::language_items::StandardOutput::print(true, format_args!($($args)+));
     }};
 
     () => {{
-        $crate::language_items::print(true, format_args!(""));
+        $crate::language_items::StandardOutput::print(true, format_args!(""));
     }};
 }
 
-/// Printing helper that uses the UART to print to standard output.
+/// Printing helper to print to standard output, without a newline.
 #[macro_export]
 macro_rules! print {
     ($($args:tt)+) => {{
-        $crate::language_items::print(false, format_args!($($args)+));
+        $crate::language_items::StandardOutput::print(false, format_args!($($args)+));
     }};
 }
 

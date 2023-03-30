@@ -6,6 +6,3 @@ links = "zebra-librs"
 
 [lib]
 crate-type = ["lib"]
-
-[dependencies]
-bitbybit = "1.1.3"

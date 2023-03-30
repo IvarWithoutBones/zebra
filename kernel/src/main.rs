@@ -44,6 +44,6 @@ extern "C" fn kernel_main() {
     println!("\n{proc:#?}\n");
     process::scheduler::insert(proc);
 
-    println!("starting scheduler");
+    println!("starting scheduler\n");
     process::scheduler::schedule();
 }

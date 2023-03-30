@@ -1,7 +1,7 @@
-use {
-    crate::process::{scheduler, trapframe},
-    bitbybit::bitenum,
-};
+use super::{scheduler, trapframe::Registers};
+use crate::{memory, uart};
+
+use bitbybit::bitenum;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SystemCallError {
@@ -14,6 +14,7 @@ pub enum SystemCall {
     Exit = 0,
     Yield = 1,
     Print = 2,
+    Read = 3,
 }
 
 impl TryFrom<u64> for SystemCall {
@@ -27,8 +28,7 @@ impl TryFrom<u64> for SystemCall {
 pub fn handle() {
     let mut procs = scheduler::PROCESSES.lock();
     let proc = procs.current().unwrap();
-    let syscall =
-        SystemCall::try_from(proc.trap_frame.registers[trapframe::Registers::A7 as usize]);
+    let syscall = SystemCall::try_from(proc.trap_frame.registers[Registers::A7 as usize]);
 
     if let Ok(syscall) = syscall {
         match syscall {
@@ -43,11 +43,11 @@ pub fn handle() {
 
             SystemCall::Print => {
                 let str = {
-                    let string_ptr = proc.trap_frame.registers[trapframe::Registers::A0 as usize];
-                    let len = proc.trap_frame.registers[trapframe::Registers::A1 as usize];
+                    let string_ptr = proc.trap_frame.registers[Registers::A0 as usize];
+                    let len = proc.trap_frame.registers[Registers::A1 as usize];
 
                     let ptr = proc.page_table.physical_addr(string_ptr as _).unwrap()
-                        + (string_ptr as usize % crate::memory::PAGE_SIZE);
+                        + (string_ptr as usize % memory::PAGE_SIZE);
                     // Surely there is no security risk associated with returning arbitrary kernel memory to the end user, with no bounds checking
                     let source = unsafe { core::slice::from_raw_parts(ptr as *const u8, len as _) };
                     core::str::from_utf8(source)
@@ -62,12 +62,19 @@ pub fn handle() {
                 }
             }
 
-            #[allow(unreachable_patterns)] // Useful when adding new system calls
-            _ => unimplemented!("system call {syscall:?}"),
+            SystemCall::Read => {
+                let result = uart::UART.lock_with(|uart| uart.poll());
+                if let Some(result) = result {
+                    proc.trap_frame.registers[Registers::A0 as usize] = result as _;
+                } else {
+                    // TODO: What would be a better way to indicate that there is no data available?
+                    proc.trap_frame.registers[Registers::A0 as usize] = 0;
+                }
+            }
         }
 
         // Skip past the `ecall` instruction
-        proc.trap_frame.registers[trapframe::Registers::ProgramCounter as usize] += 4;
+        proc.trap_frame.registers[Registers::ProgramCounter as usize] += 4;
     } else {
         let offender = procs.remove_current().unwrap().pid;
         println!("killed process {offender} because of an invalid system call: {syscall:?}");

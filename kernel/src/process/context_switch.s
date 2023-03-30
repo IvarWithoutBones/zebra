@@ -73,6 +73,9 @@ user_trap_vector:
 user_enter:
     # a0: pointer to a TrapFrame
 
+    # Disable interrupts, will be re-enabled when we execute the `sret` instruction
+    csrc sstatus, 1 << 1
+
     # Store the kernels page table
     csrr t0, satp
     sd t0, 0(a0)
@@ -85,10 +88,6 @@ user_enter:
     # Redirect traps to the trampoline
     la t0, user_trap_vector
     csrw stvec, t0
-
-    # Enable interrupts
-    li t0, 1 << 9 | 1 << 5 | 1 << 1
-    csrw sie, t0
 
     li a0, {TRAPFRAME_ADDR}
 
@@ -134,7 +133,12 @@ user_enter:
     ld a0, 72(a0) # Finally load the users a0
 
     # Set the Previous Privilege Mode to User
-    csrc sstatus, 8
+    csrc sstatus, 8 << 1
+
+    # Enable interrupts
+    csrs sie, 9 << 1
+    csrs sie, 5 << 1
+    csrs sie, 1 << 1
 
     # Begin executing in user mode
     sret
