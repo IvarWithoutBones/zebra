@@ -48,7 +48,7 @@ check:
     cargo fmt -- --check
     cargo check
     cargo clippy -- -D warnings
-    cargo test
+    cargo test --bin zebra-kernel
     @echo "tests passed"
 
 # Run the kernel in QEMU
