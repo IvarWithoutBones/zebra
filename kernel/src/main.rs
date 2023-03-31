@@ -18,6 +18,9 @@ extern crate alloc;
 
 use {arbitrary_int::u3, core::arch::global_asm};
 
+// Until a filesystem is implemented this is good enough for me :^)
+const SHELL_ELF: &[u8] = include_bytes!("../../target/riscv64gc-unknown-none-elf/debug/shell");
+
 global_asm!(include_str!("./asm/entry.s"));
 
 #[no_mangle]
@@ -40,7 +43,7 @@ extern "C" fn kernel_main() {
     #[cfg(test)]
     test_entry_point();
 
-    let proc = process::Process::new();
+    let proc = process::Process::new(SHELL_ELF);
     println!("\n{proc:#?}\n");
     process::scheduler::insert(proc);
 

@@ -1,6 +1,5 @@
 // TODO: remove
 #![allow(dead_code)]
-const BINARY: &[u8] = include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/test-bin");
 
 mod header;
 mod program;
@@ -19,8 +18,8 @@ use binrw::BinRead;
 // https://wiki.osdev.org/ELF_Tutorialhttps://wiki.osdev.org/ELF_Tutorial
 // $ cargo readobj -- --headers
 
-pub fn load_elf(page_table: &mut memory::page::Table) -> u64 {
-    let mut cursor = binrw::io::Cursor::new(BINARY);
+pub fn load_elf(elf: &[u8], page_table: &mut memory::page::Table) -> u64 {
+    let mut cursor = binrw::io::Cursor::new(elf);
     let header = header::Header::try_from(&mut cursor).unwrap();
     assert_eq!(header.identifier.class, header::Class::Bits64);
     println!("\nloading ELF {header:#?}\n");
@@ -40,7 +39,7 @@ pub fn load_elf(page_table: &mut memory::page::Table) -> u64 {
                     let len = memory::PAGE_SIZE.min(program.file_size as usize);
 
                     let mut data = Box::new([0u8; memory::PAGE_SIZE]);
-                    data[..len].copy_from_slice(&BINARY[offset..offset + len]);
+                    data[..len].copy_from_slice(&elf[offset..offset + len]);
                     data
                 };
 

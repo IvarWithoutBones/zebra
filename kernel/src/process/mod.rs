@@ -43,7 +43,7 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn new() -> Self {
+    pub fn new(elf: &[u8]) -> Self {
         let user_stack = { allocator().allocate(STACK_SIZE).unwrap() };
         // Used when trapping into the kernel, desperately needs a guard page.
         let kernel_stack = { allocator().allocate(STACK_SIZE).unwrap() };
@@ -68,7 +68,7 @@ impl Process {
         map_trampoline(&mut page_table);
 
         // Map the users program
-        let entry = crate::fairy::load_elf(&mut page_table);
+        let entry = crate::fairy::load_elf(elf, &mut page_table);
 
         let mut trap_frame = TrapFrame::new(
             page_table.build_satp() as _,
