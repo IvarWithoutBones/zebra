@@ -5,6 +5,7 @@
 
 librs::main!(main);
 
+use alloc::{string::String, vec::Vec};
 use librs::syscall;
 
 const USERNAME: &str = "someone";
@@ -14,18 +15,23 @@ fn print_prefix() {
 }
 
 fn handle_command(line: &str) {
-    let line = line.trim();
+    let mut iter = line.trim().split_ascii_whitespace();
+    let command = iter.next().unwrap_or("");
     println!(); // Newline
 
     // Not to pat myself on the back too mmuch but modern shells can learn a thing or two from this
-    match line {
+    match command {
         "exit" => syscall::exit(),
         "whoami" => println!("{USERNAME}"),
         "uname" => println!("Zebra"),
         "ls" => println!("Downloads Documents Pictures Music Videos foo.sh"),
-        "cat foo.sh" => println!("#!/usr/bin/bash\necho hello world"),
         "./foo.sh" => println!("hello world"),
-        "echo hello world" => println!("hello world"),
+        "cat foo.sh" => println!("#!/usr/bin/bash\necho hello world"),
+
+        "echo" => {
+            let args = iter.collect::<Vec<_>>().join(" ");
+            println!("{args}");
+        }
 
         "" => {}
         _ => println!("unknown command: {line}"),
@@ -36,59 +42,26 @@ fn main() {
     println!("welcome to knockoff bash");
     print_prefix();
 
-    // TODO: Implement a userland dynamic allocator so that we can just use a String here.
-    // Should also add a standardized function like `librs::io::read_line()` matching the standard library.
-    let mut buffer = [0u8; 0x1000];
-    let mut start_offset = 0;
-    let mut index = 0;
-    let mut at_beginning = true;
+    let mut command = String::with_capacity(0x100);
 
     loop {
         if let Some(c) = syscall::read() {
-            buffer[index] = c as u8;
-
             match c {
                 '\r' => {
-                    buffer[index] = b'\0';
-                    let string = core::str::from_utf8(&buffer[start_offset..index]);
-                    if let Err(err) = string {
-                        println!("INTERNAL ERROR: {err}");
-                    } else {
-                        handle_command(string.unwrap());
-                    }
-
-                    index = 0;
-                    start_offset = 0;
-                    at_beginning = true;
+                    handle_command(&command);
                     print_prefix();
+                    command.clear();
                 }
 
                 // Backspace
-                '\x7f' if !at_beginning => {
-                    index = index.saturating_sub(1);
-                    start_offset = start_offset.saturating_sub(1);
+                '\x7f' if !command.is_empty() => {
                     print!("\x08 \x08");
-
-                    if index - start_offset == 0 {
-                        at_beginning = true;
-                        start_offset = 0;
-                        index = 0;
-                    }
+                    command.pop();
                 }
 
                 _ if c.is_ascii_alphanumeric() || c.is_ascii_punctuation() || c == ' ' => {
-                    at_beginning = false;
                     print!("{c}");
-
-                    if index < buffer.len() - 1 {
-                        index += 1;
-                    } else {
-                        println!("\nbuffer full, discarding");
-                        index = 0;
-                        start_offset = 0;
-                        at_beginning = true;
-                        print_prefix();
-                    }
+                    command.push(c);
                 }
 
                 _ => {}
