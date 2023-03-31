@@ -8,6 +8,7 @@ pub enum SystemCall {
     Read = 3,
     Allocate = 4,
     Deallocate = 5,
+    Spawn = 6,
 }
 
 /// Exit the current process.
@@ -45,6 +46,7 @@ pub fn read() -> Option<char> {
     }
 }
 
+/// Allocate a block of memory of the given size.
 pub fn allocate(size: usize) -> *mut u8 {
     let result: *mut u8;
     unsafe {
@@ -53,8 +55,19 @@ pub fn allocate(size: usize) -> *mut u8 {
     result
 }
 
-pub fn deallocate(ptr: *mut u8) {
+/// Deallocate a block of memory, may panic if the pointer is invalid.
+///
+/// # Safety
+/// The callee must ensure that the pointer is valid.
+pub unsafe fn deallocate(ptr: *mut u8) {
     unsafe {
         asm!("ecall", in("a7") SystemCall::Deallocate as usize, in("a0") ptr);
+    }
+}
+
+/// Spawn a new process from an ELF file.
+pub fn spawn(elf: &[u8]) {
+    unsafe {
+        asm!("ecall", in("a7") SystemCall::Spawn as usize, in("a0") elf.as_ptr(), in("a1") elf.len());
     }
 }

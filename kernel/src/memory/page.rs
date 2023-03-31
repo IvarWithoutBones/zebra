@@ -137,6 +137,7 @@ impl Table {
         for lvl in (level..2).rev() {
             if !v.is_valid() {
                 let table = Box::new(Table::new());
+
                 *v = Entry::new(
                     Box::into_raw(table) as usize,
                     EntryAttributes::Valid as usize,

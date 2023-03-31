@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-const INTERVAL: u64 = 1000_0000;
+const INTERVAL: u64 = 10000;
 
 const BASE_ADDR: usize = 0x0200_0000;
 const MTIME: usize = BASE_ADDR + 0xBFF8;

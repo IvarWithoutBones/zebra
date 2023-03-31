@@ -42,8 +42,7 @@ clear_bss_loop:
 	csrs mstatus, t0
 
     # Set the Physical Memory Protection to allow Supervisor to access all memory
-    li t0, 0xf
-    csrw pmpcfg0, t0
+    csrwi pmpcfg0, 0xf
 
 	# Temporarily disable paging, will be enabled by the kernel once its ready
 	csrw satp, zero

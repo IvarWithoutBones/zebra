@@ -16,6 +16,7 @@ pub enum SystemCall {
     Read = 3,
     Allocate = 4,
     Deallocate = 5,
+    Spawn = 6,
 }
 
 impl TryFrom<u64> for SystemCall {
@@ -31,12 +32,14 @@ pub fn handle() {
     let proc = procs.current().unwrap();
     let syscall = SystemCall::try_from(proc.trap_frame.registers[Registers::A7 as usize]);
 
+    // Skip past the `ecall` instruction
+    proc.trap_frame.registers[Registers::ProgramCounter as usize] += 4;
+
     if let Ok(syscall) = syscall {
         match syscall {
             SystemCall::Exit => {
                 let pid = procs.remove_current().unwrap().pid;
                 println!("process {pid} gracefully exited");
-                return;
             }
 
             // `schedule()` will be called by the trap handler immediately afterwards
@@ -58,7 +61,6 @@ pub fn handle() {
                 } else {
                     let pid = procs.remove_current().unwrap().pid;
                     println!("invalid string passed from {pid} to SystemCall::Print: {str:?}. Killing process");
-                    return;
                 }
             }
 
@@ -87,7 +89,6 @@ pub fn handle() {
                 } else {
                     let pid = procs.remove_current().unwrap().pid;
                     println!("failed to allocate memory for process {pid} with size {size:#x}. Killing process");
-                    return;
                 }
             }
 
@@ -105,13 +106,24 @@ pub fn handle() {
                 } else {
                     let pid = procs.remove_current().unwrap().pid;
                     println!("process {pid} attempted to deallocate unmapped memory: {ptr:#x}. Killing process");
-                    return;
                 }
             }
-        }
 
-        // Skip past the `ecall` instruction
-        proc.trap_frame.registers[Registers::ProgramCounter as usize] += 4;
+            SystemCall::Spawn => {
+                let elf = {
+                    let elf_ptr = {
+                        let source = proc.trap_frame.registers[Registers::A0 as usize];
+                        proc.page_table.physical_addr(source as _).unwrap()
+                    };
+                    let elf_size = proc.trap_frame.registers[Registers::A1 as usize];
+                    // The safety concerns from SystemCall::Print apply here as well
+                    unsafe { core::slice::from_raw_parts(elf_ptr as *const u8, elf_size as _) }
+                };
+
+                let new_proc = super::Process::new(elf);
+                procs.push(new_proc);
+            }
+        }
     } else {
         let offender = procs.remove_current().unwrap().pid;
         println!("killed process {offender} because of an invalid system call: {syscall:?}");

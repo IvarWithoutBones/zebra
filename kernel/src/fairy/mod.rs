@@ -22,7 +22,6 @@ pub fn load_elf(elf: &[u8], page_table: &mut memory::page::Table) -> u64 {
     let mut cursor = binrw::io::Cursor::new(elf);
     let header = header::Header::try_from(&mut cursor).unwrap();
     assert_eq!(header.identifier.class, header::Class::Bits64);
-    println!("\nloading ELF {header:#?}\n");
 
     cursor.set_position(header.primary.program_header_start_64.unwrap() as _);
     for _ in 0..header.primary.program_header_entry_count {
@@ -31,13 +30,12 @@ pub fn load_elf(elf: &[u8], page_table: &mut memory::page::Table) -> u64 {
 
         if program.program_type == program::ProgramType::Loadable {
             let pages_needed = memory::align_page_up(program.file_size as _) / memory::PAGE_SIZE;
+            let len = memory::PAGE_SIZE.min(program.file_size as usize);
 
             for page in 0..pages_needed {
                 // New page filled with the program data
                 let page_data = {
                     let offset = program.offset as usize + (page * memory::PAGE_SIZE);
-                    let len = memory::PAGE_SIZE.min(program.file_size as usize);
-
                     let mut data = Box::new([0u8; memory::PAGE_SIZE]);
                     data[..len].copy_from_slice(&elf[offset..offset + len]);
                     data
@@ -47,18 +45,16 @@ pub fn load_elf(elf: &[u8], page_table: &mut memory::page::Table) -> u64 {
                 let vaddr = memory::align_page_down(
                     program.virtual_address as usize + (page * memory::PAGE_SIZE),
                 );
-                println!("mapping page {:#x} -> {:#p}", vaddr, page_data.as_ptr());
 
-                // Map the page to the virtual address. TODO: proper flags
+                // Map the page to the virtual address.
                 page_table.map_page(
                     vaddr,
-                    Box::leak(page_data) as *mut _ as _,
+                    Box::into_raw(page_data) as usize,
                     program.flags.as_page_attributes(),
                 );
             }
         }
     }
 
-    println!("finished mapping ELF!");
     header.primary.entry_point_64.unwrap()
 }

@@ -82,7 +82,7 @@ impl Allocator {
     /// Deallocates a pointer.
     pub fn deallocate(&mut self, ptr: *mut u8) {
         let id = self.offset_page_of(ptr);
-        let page_stride = self.pages[id];
+        let page_stride = self.pages.get(id).cloned().unwrap_or(0);
         for i in 0..page_stride {
             self.pages[id + i] = 0;
         }

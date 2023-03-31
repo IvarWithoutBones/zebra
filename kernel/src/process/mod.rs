@@ -13,7 +13,7 @@ use {
     },
 };
 
-const STACK_SIZE: usize = 4 * PAGE_SIZE;
+const STACK_SIZE: usize = 40 * PAGE_SIZE;
 const TRAPFRAME_ADDR: usize = 0x1000;
 
 static NEXT_PID: AtomicUsize = AtomicUsize::new(1);
