@@ -5,6 +5,7 @@
 
 #[macro_use]
 pub mod language_items;
+pub mod allocator;
 pub mod syscall;
 
 extern "C" {
@@ -17,6 +18,7 @@ macro_rules! main {
     ($func:expr) => {
         #[macro_use]
         extern crate librs;
+        extern crate alloc;
 
         /// The entry point of the program, called by the ELF loader.
         #[no_mangle]

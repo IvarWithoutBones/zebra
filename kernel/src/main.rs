@@ -1,4 +1,4 @@
-#![feature(asm_const, custom_test_frameworks, fn_align, panic_info_message)]
+#![feature(asm_const, custom_test_frameworks)]
 #![reexport_test_harness_main = "test_entry_point"]
 #![test_runner(language_items::test_runner)]
 #![no_std]

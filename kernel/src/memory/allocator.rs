@@ -68,7 +68,7 @@ impl Allocator {
 
             if found {
                 for j in 0..pages_needed {
-                    self.pages[i + j] = pages_needed;
+                    self.pages[i + j] = pages_needed - j;
                 }
 
                 return Some(unsafe { self.offset_id_of(i) });
@@ -79,12 +79,18 @@ impl Allocator {
         None
     }
 
-    pub fn deallocate(&mut self, ptr: *mut u8) {
+    /// Deallocates a pointer.
+    pub fn deallocate(&mut self, ptr: *mut u8)  {
         let id = self.offset_page_of(ptr);
         let page_stride = self.pages[id];
         for i in 0..page_stride {
             self.pages[id + i] = 0;
         }
+    }
+
+    pub fn size_of(&self, ptr: *mut u8) -> usize {
+        let id = self.offset_page_of(ptr);
+        self.pages[id] * PAGE_SIZE
     }
 }
 

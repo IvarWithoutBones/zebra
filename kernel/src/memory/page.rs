@@ -185,7 +185,27 @@ impl Table {
             };
         }
 
-        Some(v.paddr())
+        Some(v.paddr() + (vaddr % PAGE_SIZE))
+    }
+
+    pub fn unmap(&mut self, vaddr: usize) {
+        let vpn = VirtualPageNumber(vaddr);
+        let mut v = &mut self.entries[vpn.vpn2()];
+
+        for lvl in (0..2).rev() {
+            if !v.is_valid() {
+                return;
+            }
+
+            // Get the next level
+            v = unsafe {
+                // We need volatile as this gets optimized out otherwise
+                let entry: *mut Entry = read_volatile(&v.paddr() as *const _) as _;
+                entry.add(vpn.index(lvl)).as_mut().unwrap()
+            };
+        }
+
+        *v = Entry(0);
     }
 }
 

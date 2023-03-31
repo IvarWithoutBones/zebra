@@ -6,6 +6,8 @@ pub enum SystemCall {
     Yield = 1,
     Print = 2,
     Read = 3,
+    Allocate = 4,
+    Deallocate = 5,
 }
 
 /// Exit the current process.
@@ -40,5 +42,19 @@ pub fn read() -> Option<char> {
         None
     } else {
         core::char::from_u32(result as _)
+    }
+}
+
+pub fn allocate(size: usize) -> *mut u8 {
+    let result: *mut u8;
+    unsafe {
+        asm!("ecall", in("a7") SystemCall::Allocate as usize, in("a0") size, lateout("a0") result);
+    }
+    result
+}
+
+pub fn deallocate(ptr: *mut u8) {
+    unsafe {
+        asm!("ecall", in("a7") SystemCall::Deallocate as usize, in("a0") ptr);
     }
 }
