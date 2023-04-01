@@ -1,7 +1,10 @@
-use {
-    super::{page, PAGE_SIZE},
-    crate::{power, trap::plic, uart},
+use super::{page, PAGE_SIZE};
+use crate::{
+    power,
+    trap::{clint, plic},
+    uart,
 };
+use core::mem::size_of;
 
 /// Generate a safe wrapper to access a linker section.
 macro_rules! section {
@@ -71,6 +74,12 @@ pub fn map_kernel(page_table: &mut page::Table) {
     page_table.identity_map(
         plic::BASE_ADDR,
         plic::BASE_ADDR + 0x400000,
+        page::EntryAttributes::ReadWrite,
+    );
+
+    page_table.identity_map(
+        clint::MTIME,
+        clint::MTIME + size_of::<u64>(),
         page::EntryAttributes::ReadWrite,
     );
 

@@ -1,4 +1,4 @@
-mod clint;
+pub mod clint;
 pub mod plic;
 
 use {

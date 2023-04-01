@@ -22,9 +22,13 @@ fn handle_command(line: &str) {
     let command = iter.next().unwrap_or("");
     println!(); // Newline
 
-    // Not to pat myself on the back too mmuch but modern shells can learn a thing or two from this
     match command {
         "exit" => syscall::exit(),
+
+        "uptime" => {
+            let uptime = syscall::duration_since_boot();
+            println!("uptime: {uptime:?}");
+        }
 
         "hello" => {
             syscall::spawn(HELLO_ELF);
@@ -34,16 +38,17 @@ fn handle_command(line: &str) {
             }
         }
 
+        "echo" => {
+            let args = iter.collect::<Vec<_>>().join(" ");
+            println!("{args}");
+        }
+
+        // Not to pat myself on the back too much but modern shells can learn a thing or two from this
         "whoami" => println!("{USERNAME}"),
         "uname" => println!("Zebra"),
         "ls" => println!("Downloads Documents Pictures Music Videos foo.sh"),
         "./foo.sh" => println!("hello world"),
         "cat foo.sh" => println!("#!/usr/bin/bash\necho hello world"),
-
-        "echo" => {
-            let args = iter.collect::<Vec<_>>().join(" ");
-            println!("{args}");
-        }
 
         "" => {}
         _ => println!("unknown command: {line}"),

@@ -1,5 +1,5 @@
 use super::{scheduler, trapframe::Registers};
-use crate::{memory, uart};
+use crate::{memory, trap::clint, uart};
 use bitbybit::bitenum;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -17,6 +17,7 @@ pub enum SystemCall {
     Allocate = 4,
     Deallocate = 5,
     Spawn = 6,
+    DurationSinceBootup = 7,
 }
 
 impl TryFrom<u64> for SystemCall {
@@ -122,6 +123,12 @@ pub fn handle() {
 
                 let new_proc = super::Process::new(elf);
                 procs.push(new_proc);
+            }
+
+            SystemCall::DurationSinceBootup => {
+                let time = clint::time_since_bootup();
+                proc.trap_frame.registers[Registers::A0 as usize] = time.as_secs() as _;
+                proc.trap_frame.registers[Registers::A1 as usize] = time.subsec_nanos() as _;
             }
         }
     } else {

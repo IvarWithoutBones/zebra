@@ -1,8 +1,6 @@
-use {
-    super::{Process, ProcessState},
-    crate::spinlock::Spinlock,
-    alloc::vec::Vec,
-};
+use super::{Process, ProcessState};
+use crate::spinlock::Spinlock;
+use alloc::vec::Vec;
 
 pub static PROCESSES: Spinlock<ProcessList> = Spinlock::new(ProcessList::new());
 

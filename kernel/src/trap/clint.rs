@@ -1,10 +1,11 @@
-use core::arch::asm;
+use core::{arch::asm, time::Duration};
 
+/// The interval at which machine timer interrupts are triggered.
 const INTERVAL: u64 = 10000;
 
-const BASE_ADDR: usize = 0x0200_0000;
-const MTIME: usize = BASE_ADDR + 0xBFF8;
-const MTIMECMP: usize = BASE_ADDR + 0x4000;
+pub const BASE_ADDR: usize = 0x0200_0000;
+pub const MTIME: usize = BASE_ADDR + 0xBFF8;
+pub const MTIMECMP: usize = BASE_ADDR + 0x4000;
 
 /// Information saved between traps, assuming one HART. Layout must match `vector.s`.
 ///     0: `mtime` pointer
@@ -36,4 +37,9 @@ unsafe extern "C" fn machine_timer_init() {
     asm!("csrs mie, {}", in(reg) 1 << 7);
 
     println!("machine timer initialized");
+}
+
+pub fn time_since_bootup() -> Duration {
+    let mtime = unsafe { (MTIME as *const u64).read_volatile() };
+    Duration::from_nanos(mtime * 100)
 }

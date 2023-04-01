@@ -6,6 +6,5 @@
 librs::main!(main);
 
 fn main() {
-    // Extra newline is just here until proper standard output synchronization is implemented, makes things look nicer
     println!("Hello, world!");
 }
