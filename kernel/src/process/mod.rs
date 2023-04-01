@@ -1,3 +1,5 @@
+use core::time::Duration;
+
 pub mod scheduler;
 pub mod syscall;
 pub mod trapframe;
@@ -25,13 +27,11 @@ extern "C" {
     fn user_enter(trap_frame: *const TrapFrame) -> !;
 }
 
-#[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum ProcessState {
     Running,
-    Sleeping,
+    Sleeping(Duration),
     Waiting,
-    Dead,
 }
 
 #[repr(C)]

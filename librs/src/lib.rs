@@ -8,11 +8,7 @@ pub mod language_items;
 pub mod allocator;
 pub mod syscall;
 
-extern "C" {
-    fn __zebra_main();
-}
-
-/// Defines the entry point of the program, which is called by the ELF loader.
+/// Defines the entry point of the program, which is called by the `librs` runtime.
 #[macro_export]
 macro_rules! main {
     ($func:expr) => {
@@ -20,7 +16,7 @@ macro_rules! main {
         extern crate librs;
         extern crate alloc;
 
-        /// The entry point of the program, called by the ELF loader.
+        /// The entry point of program execution, called by the `librs` runtime.
         #[no_mangle]
         pub extern "C" fn __zebra_main() {
             // Type check the function
@@ -28,6 +24,10 @@ macro_rules! main {
             function();
         }
     };
+}
+
+extern "C" {
+    fn __zebra_main();
 }
 
 #[no_mangle]

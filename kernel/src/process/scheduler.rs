@@ -1,6 +1,7 @@
 use super::{Process, ProcessState};
-use crate::spinlock::Spinlock;
+use crate::{spinlock::Spinlock, trap::clint};
 use alloc::vec::Vec;
+use core::arch::asm;
 
 pub static PROCESSES: Spinlock<ProcessList> = Spinlock::new(ProcessList::new());
 
@@ -40,6 +41,17 @@ impl ProcessList {
     pub fn current(&mut self) -> Option<&mut Process> {
         self.processes.get_mut(self.current?)
     }
+
+    pub fn handle_sleep(&mut self) {
+        let now = clint::time_since_bootup();
+        for proc in self.processes.iter_mut() {
+            if let ProcessState::Sleeping(until) = proc.state {
+                if now >= until {
+                    proc.state = ProcessState::Waiting;
+                }
+            }
+        }
+    }
 }
 
 pub fn insert(process: Process) {
@@ -52,11 +64,30 @@ pub fn schedule() -> ! {
     PROCESSES
         .lock_with(|procs| {
             if let Some(current) = procs.current() {
-                current.state = ProcessState::Waiting;
+                if let ProcessState::Sleeping(_) = current.state {
+                    // Do nothing
+                } else {
+                    current.state = ProcessState::Waiting;
+                }
             }
 
-            let next_proc: *mut Process =
+            let mut next_proc: *mut Process =
                 procs.next().expect("no processes to schedule") as *const _ as _;
+
+            // Find a process that is waiting to run
+            let mut i = 0;
+            while unsafe { &*next_proc }.state != ProcessState::Waiting {
+                next_proc = procs.next().expect("no processes to schedule") as *const _ as _;
+
+                // If we checked all others, sleep until an interrupt occurs (will most likely be the CLINT's timer)
+                // TODO: This is not a very robust solution at all, it is just a placeholder.
+                if i >= procs.processes.len() {
+                    unsafe { asm!("wfi") }
+                    procs.handle_sleep();
+                }
+                i += 1;
+            }
+
             unsafe { &mut *next_proc }
         })
         .run()

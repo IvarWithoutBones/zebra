@@ -1,4 +1,6 @@
-use super::{scheduler, trapframe::Registers};
+use core::time::Duration;
+
+use super::{scheduler, trapframe::Registers, ProcessState};
 use crate::{memory, trap::clint, uart};
 use bitbybit::bitenum;
 
@@ -18,6 +20,7 @@ pub enum SystemCall {
     Deallocate = 5,
     Spawn = 6,
     DurationSinceBootup = 7,
+    Sleep = 8,
 }
 
 impl TryFrom<u64> for SystemCall {
@@ -99,11 +102,10 @@ pub fn handle() {
                 // Check if it was mapped in the first place
                 if let Some(physical_addr) = proc.page_table.physical_addr(ptr) {
                     let mut alloc = memory::allocator();
-
-                    alloc.deallocate(physical_addr as _);
                     for i in 0..alloc.size_of(physical_addr as _) {
                         proc.page_table.unmap(ptr + i);
                     }
+                    alloc.deallocate(physical_addr as _);
                 } else {
                     let pid = procs.remove_current().unwrap().pid;
                     println!("process {pid} attempted to deallocate unmapped memory: {ptr:#x}. Killing process");
@@ -129,6 +131,17 @@ pub fn handle() {
                 let time = clint::time_since_bootup();
                 proc.trap_frame.registers[Registers::A0 as usize] = time.as_secs() as _;
                 proc.trap_frame.registers[Registers::A1 as usize] = time.subsec_nanos() as _;
+            }
+
+            SystemCall::Sleep => {
+                let duration = {
+                    let seconds = proc.trap_frame.registers[Registers::A0 as usize];
+                    let nanoseconds = proc.trap_frame.registers[Registers::A1 as usize] as u32;
+                    Duration::new(seconds, nanoseconds)
+                };
+
+                let wakeup_time = clint::time_since_bootup() + duration;
+                proc.state = ProcessState::Sleeping(wakeup_time);
             }
         }
     } else {

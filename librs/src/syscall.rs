@@ -10,6 +10,7 @@ pub enum SystemCall {
     Deallocate = 5,
     Spawn = 6,
     DurationSinceBootup = 7,
+    Sleep = 8,
 }
 
 /// Exit the current process.
@@ -81,4 +82,13 @@ pub fn duration_since_boot() -> Duration {
         asm!("ecall", in("a7") SystemCall::DurationSinceBootup as usize, lateout("a0") secs, lateout("a1") subsec_nanos, options(nomem, nostack));
     }
     Duration::new(secs, subsec_nanos as _)
+}
+
+/// Sleep for the given duration.
+pub fn sleep(duration: Duration) {
+    let secs = duration.as_secs();
+    let subsec_nanos = duration.subsec_nanos();
+    unsafe {
+        asm!("ecall", in("a7") SystemCall::Sleep as usize, in("a0") secs, in("a1") subsec_nanos, options(nomem, nostack));
+    }
 }

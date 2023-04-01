@@ -30,19 +30,19 @@ clear_bss_loop:
     csrw medeleg, t0
     csrw mideleg, t0
 
+    # Set the Physical Memory Protection to allow Supervisor to access all memory
+    csrwi pmpcfg0, 0xf
+
+    # Allow Supervisor to access counter registers (`CYCLE`, `TIME`, `INSTRET`)
+    csrwi mcounteren, 1 | 1 << 1 | 1 << 2
+    csrwi scounteren, 1 << 1 # Only allow `TIME` for User
+
     # Set the Machine trap vector
     la t0, machine_trap_vector
     csrw mtvec, t0
 
     # Initialize timer interrupts
     call machine_timer_init
-
-    # Set the Machine Previous Privilege mode to Supervisor, this will apply once we call `mret`
-    li t0, 1 << 11
-	csrs mstatus, t0
-
-    # Set the Physical Memory Protection to allow Supervisor to access all memory
-    csrwi pmpcfg0, 0xf
 
 	# Temporarily disable paging, will be enabled by the kernel once its ready
 	csrw satp, zero
@@ -53,6 +53,10 @@ clear_bss_loop:
 
 	# Place to continue execution after the kernel has finished (should never be reached)
 	la ra, park_hart
+
+    # Set the Machine Previous Privilege mode to Supervisor, this will apply once we call `mret`
+    li t0, 1 << 11
+	csrs mstatus, t0
 
 	# Enter supervisor mode and jump to the kernel
 	mret

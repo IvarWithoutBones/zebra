@@ -6,12 +6,14 @@
 librs::main!(main);
 
 use alloc::{string::String, vec::Vec};
+use core::time::Duration;
 use librs::syscall;
 
 // Filesystems are bloatware
 const HELLO_ELF: &[u8] = include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/hello");
-
 const USERNAME: &str = "someone";
+
+const SLEEP_DURATION: Duration = Duration::from_millis(20);
 
 fn print_prefix() {
     print!("[{USERNAME}@zebra:~]$ ");
@@ -32,10 +34,16 @@ fn handle_command(line: &str) {
 
         "hello" => {
             syscall::spawn(HELLO_ELF);
-            // Dont mess up the prompt. TODO: `syscall::sleep()` and a blocking `syscall::spawn()`
-            for _ in 0..4 {
-                syscall::yield_proc();
-            }
+            // Dont mess up the prompt. TODO: a blocking `syscall::spawn()`
+            syscall::sleep(Duration::from_millis(100));
+        }
+
+        "sleep" => {
+            let secs: u64 = iter.next().unwrap().parse().unwrap();
+            let duration = Duration::from_secs(secs);
+            println!("sleeping for {secs} seconds");
+            syscall::sleep(duration);
+            println!("done sleeping");
         }
 
         "echo" => {
@@ -64,6 +72,7 @@ fn main() {
     loop {
         if let Some(c) = syscall::read() {
             match c {
+                // Enter
                 '\r' => {
                     handle_command(&command);
                     print_prefix();
@@ -81,6 +90,7 @@ fn main() {
                     handle_command("exit");
                 }
 
+                // Regular character
                 _ if c.is_ascii_alphanumeric() || c.is_ascii_punctuation() || c == ' ' => {
                     print!("{c}");
                     command.push(c);
@@ -88,6 +98,8 @@ fn main() {
 
                 _ => {}
             }
+        } else {
+            syscall::sleep(SLEEP_DURATION);
         }
     }
 }
