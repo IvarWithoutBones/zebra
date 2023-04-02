@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use super::{scheduler, trapframe::Registers, ProcessState};
+use super::{scheduler, trapframe::Registers, Process, ProcessState};
 use crate::{memory, trap::clint, uart};
 use bitbybit::bitenum;
 
@@ -14,13 +14,13 @@ pub enum SystemCallError {
 pub enum SystemCall {
     Exit = 0,
     Yield = 1,
-    Print = 2,
-    Read = 3,
+    Sleep = 2,
+    Spawn = 3,
     Allocate = 4,
     Deallocate = 5,
-    Spawn = 6,
-    DurationSinceBootup = 7,
-    Sleep = 8,
+    DurationSinceBootup = 6,
+    Print = 7,
+    Read = 8,
 }
 
 impl TryFrom<u64> for SystemCall {
@@ -113,17 +113,24 @@ pub fn handle() {
             }
 
             SystemCall::Spawn => {
+                let elf_ptr = proc.trap_frame.registers[Registers::A0 as usize];
+                let elf_size = proc.trap_frame.registers[Registers::A1 as usize];
+                let blocking = proc.trap_frame.registers[Registers::A2 as usize] != 0;
+
                 let elf = {
-                    let elf_ptr = {
-                        let source = proc.trap_frame.registers[Registers::A0 as usize];
-                        proc.page_table.physical_addr(source as _).unwrap()
-                    };
-                    let elf_size = proc.trap_frame.registers[Registers::A1 as usize];
+                    let elf_ptr = { proc.page_table.physical_addr(elf_ptr as _).unwrap() };
                     // The safety concerns from SystemCall::Print apply here as well
                     unsafe { core::slice::from_raw_parts(elf_ptr as *const u8, elf_size as _) }
                 };
 
-                let new_proc = super::Process::new(elf);
+                let new_proc = if blocking {
+                    let new_proc = Process::new(elf);
+                    proc.state = ProcessState::WaitingForChild(new_proc.pid);
+                    new_proc
+                } else {
+                    Process::new(elf)
+                };
+
                 procs.push(new_proc);
             }
 
@@ -158,14 +165,14 @@ mod tests {
     fn raw_value() {
         assert_eq!(SystemCall::Exit.raw_value(), 0);
         assert_eq!(SystemCall::Yield.raw_value(), 1);
-        assert_eq!(SystemCall::Print.raw_value(), 2);
+        assert_eq!(SystemCall::Sleep.raw_value(), 2);
     }
 
     #[test_case]
     fn parse_valid() {
         assert_eq!(SystemCall::Exit, SystemCall::try_from(0).unwrap());
         assert_eq!(SystemCall::Yield, SystemCall::try_from(1).unwrap());
-        assert_eq!(SystemCall::Print, SystemCall::try_from(2).unwrap());
+        assert_eq!(SystemCall::Sleep, SystemCall::try_from(2).unwrap());
     }
 
     #[test_case]

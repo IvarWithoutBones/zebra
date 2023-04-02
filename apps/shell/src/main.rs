@@ -33,9 +33,11 @@ fn handle_command(line: &str) {
         }
 
         "hello" => {
-            syscall::spawn(HELLO_ELF);
-            // Dont mess up the prompt. TODO: a blocking `syscall::spawn()`
-            syscall::sleep(Duration::from_millis(100));
+            syscall::spawn(HELLO_ELF, true);
+        }
+
+        "async_hello" => {
+            syscall::spawn(HELLO_ELF, false);
         }
 
         "sleep" => {

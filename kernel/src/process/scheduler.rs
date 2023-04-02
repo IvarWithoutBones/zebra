@@ -23,7 +23,16 @@ impl ProcessList {
     }
 
     pub fn remove_current(&mut self) -> Option<Process> {
-        Some(self.processes.remove(self.current?))
+        let proc = self.processes.remove(self.current?);
+
+        // Let the parent process continue if it was waiting on us
+        self.processes
+            .iter_mut()
+            .find(|p| p.state == ProcessState::WaitingForChild(proc.pid))
+            .map(|p| p.state = ProcessState::Waiting)
+            .unwrap_or(());
+
+        Some(proc)
     }
 
     pub fn next(&mut self) -> Option<&Process> {
@@ -42,7 +51,7 @@ impl ProcessList {
         self.processes.get_mut(self.current?)
     }
 
-    pub fn handle_sleep(&mut self) {
+    pub fn handle_sleeping(&mut self) {
         let now = clint::time_since_bootup();
         for proc in self.processes.iter_mut() {
             if let ProcessState::Sleeping(until) = proc.state {
@@ -64,9 +73,7 @@ pub fn schedule() -> ! {
     PROCESSES
         .lock_with(|procs| {
             if let Some(current) = procs.current() {
-                if let ProcessState::Sleeping(_) = current.state {
-                    // Do nothing
-                } else {
+                if current.state == ProcessState::Running {
                     current.state = ProcessState::Waiting;
                 }
             }
@@ -83,7 +90,8 @@ pub fn schedule() -> ! {
                 // TODO: This is not a very robust solution at all, it is just a placeholder.
                 if i >= procs.processes.len() {
                     unsafe { asm!("wfi") }
-                    procs.handle_sleep();
+                    procs.handle_sleeping();
+                    i = 0;
                 }
                 i += 1;
             }

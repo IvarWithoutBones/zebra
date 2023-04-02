@@ -1,16 +1,17 @@
 use core::{arch::asm, time::Duration};
 
+// TODO: merge this with the enum from the kernel
 #[derive(Debug, PartialEq, Eq)]
 pub enum SystemCall {
     Exit = 0,
     Yield = 1,
-    Print = 2,
-    Read = 3,
+    Sleep = 2,
+    Spawn = 3,
     Allocate = 4,
     Deallocate = 5,
-    Spawn = 6,
-    DurationSinceBootup = 7,
-    Sleep = 8,
+    DurationSinceBootup = 6,
+    Print = 7,
+    Read = 8,
 }
 
 /// Exit the current process.
@@ -67,10 +68,10 @@ pub unsafe fn deallocate(ptr: *mut u8) {
     }
 }
 
-/// Spawn a new process from an ELF file.
-pub fn spawn(elf: &[u8]) {
+/// Spawn a new process from an ELF file. If `blocking` is `true`, the current process will block until the new process exits.
+pub fn spawn(elf: &[u8], blocking: bool) {
     unsafe {
-        asm!("ecall", in("a7") SystemCall::Spawn as usize, in("a0") elf.as_ptr(), in("a1") elf.len(), options(nomem, nostack));
+        asm!("ecall", in("a7") SystemCall::Spawn as usize, in("a0") elf.as_ptr(), in("a1") elf.len(), in("a2") blocking as u64, options(nomem, nostack));
     }
 }
 

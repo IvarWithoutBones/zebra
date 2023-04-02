@@ -1,18 +1,15 @@
-use core::time::Duration;
-
 pub mod scheduler;
 pub mod syscall;
 pub mod trapframe;
 
-use {
-    self::trapframe::TrapFrame,
-    crate::memory::{allocator, page, sections::map_trampoline, PAGE_SIZE},
-    alloc::boxed::Box,
-    core::{
-        arch::global_asm,
-        fmt,
-        sync::atomic::{AtomicUsize, Ordering},
-    },
+use self::trapframe::TrapFrame;
+use crate::memory::{allocator, page, sections::map_trampoline, PAGE_SIZE};
+use alloc::boxed::Box;
+use core::{
+    arch::global_asm,
+    fmt,
+    sync::atomic::{AtomicUsize, Ordering},
+    time::Duration,
 };
 
 const STACK_SIZE: usize = 40 * PAGE_SIZE;
@@ -30,8 +27,10 @@ extern "C" {
 #[derive(Debug, PartialEq, Eq)]
 enum ProcessState {
     Running,
-    Sleeping(Duration),
     Waiting,
+    // TODO: does it make sense to merge the two below, with it holding a more generic `WaitCondition`?
+    Sleeping(Duration),
+    WaitingForChild(usize),
 }
 
 #[repr(C)]
