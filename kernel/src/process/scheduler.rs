@@ -88,12 +88,12 @@ pub fn schedule() -> ! {
 
                 // If we checked all others, sleep until an interrupt occurs (will most likely be the CLINT's timer)
                 // TODO: This is not a very robust solution at all, it is just a placeholder.
-                if i >= procs.processes.len() {
+                i += 1;
+                if i > procs.processes.len() {
                     unsafe { asm!("wfi") }
                     procs.handle_sleeping();
                     i = 0;
                 }
-                i += 1;
             }
 
             unsafe { &mut *next_proc }

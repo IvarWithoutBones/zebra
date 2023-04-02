@@ -1,12 +1,13 @@
 #![feature(custom_test_frameworks)]
-#![test_runner(language_items::test_runner)]
+#![test_runner(test::test_runner)]
 #![reexport_test_harness_main = "test_entry_point"]
 #![no_std]
 
 #[macro_use]
-pub mod language_items;
+pub mod print;
 pub mod allocator;
 pub mod syscall;
+pub mod test;
 
 /// Defines the entry point of the program, which is called by the `librs` runtime.
 #[macro_export]
