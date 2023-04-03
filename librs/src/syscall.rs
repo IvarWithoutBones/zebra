@@ -1,4 +1,4 @@
-use core::{arch::asm, time::Duration};
+use core::{arch::asm, ops::RangeInclusive, time::Duration};
 
 // TODO: merge this with the enum from the kernel
 #[derive(Debug, PartialEq, Eq)]
@@ -12,6 +12,7 @@ pub enum SystemCall {
     DurationSinceBootup = 6,
     Print = 7,
     Read = 8,
+    IdentityMap = 9,
 }
 
 /// Exit the current process.
@@ -91,5 +92,14 @@ pub fn sleep(duration: Duration) {
     let subsec_nanos = duration.subsec_nanos();
     unsafe {
         asm!("ecall", in("a7") SystemCall::Sleep as usize, in("a0") secs, in("a1") subsec_nanos, options(nomem, nostack));
+    }
+}
+
+/// Identity map the given range of physical memory into the processes address space.
+pub fn identity_map(range: RangeInclusive<u64>) {
+    let start = *range.start();
+    let end = *range.end();
+    unsafe {
+        asm!("ecall", in("a7") SystemCall::IdentityMap as usize, in("a0") start, in("a1") end, options(nomem, nostack));
     }
 }

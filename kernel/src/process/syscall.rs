@@ -21,6 +21,7 @@ pub enum SystemCall {
     DurationSinceBootup = 6,
     Print = 7,
     Read = 8,
+    IdentityMap = 9,
 }
 
 impl TryFrom<u64> for SystemCall {
@@ -149,6 +150,24 @@ pub fn handle() {
 
                 let wakeup_time = clint::time_since_bootup() + duration;
                 proc.state = ProcessState::Sleeping(wakeup_time);
+            }
+
+            // TODO: Capabilities, not every process should be allowed to do this.
+            // TODO: Maybe it would make more sense to only allow this when spawing a new process?
+            SystemCall::IdentityMap => {
+                let start = proc.trap_frame.registers[Registers::A0 as usize] as usize;
+                let end = proc.trap_frame.registers[Registers::A1 as usize] as usize;
+
+                let root_table = memory::page::root_table();
+                // TODO: this will not work if the given address is not already mapped by the kernel.
+                let physical_start = root_table.physical_addr(start).unwrap();
+                let physical_end = root_table.physical_addr(end).unwrap();
+
+                proc.page_table.identity_map(
+                    physical_start,
+                    physical_end,
+                    memory::page::EntryAttributes::UserReadWrite, // Execute permissions dont seem like a good idea
+                );
             }
         }
     } else {
