@@ -25,12 +25,17 @@ extern "C" {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+enum WaitCondition {
+    Duration(Duration),
+    ChildExit { child_pid: usize },
+    MessageReceived,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 enum ProcessState {
     Running,
-    Waiting,
-    // TODO: does it make sense to merge the two below, with it holding a more generic `WaitCondition`?
-    Sleeping(Duration),
-    WaitingForChild(usize),
+    Ready,
+    Waiting(WaitCondition),
 }
 
 #[repr(C)]
@@ -87,7 +92,7 @@ impl Process {
         Self {
             trap_frame,
             page_table,
-            state: ProcessState::Waiting,
+            state: ProcessState::Ready,
             pid: NEXT_PID.fetch_add(1, Ordering::Relaxed),
         }
     }

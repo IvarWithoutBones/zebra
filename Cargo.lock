@@ -73,6 +73,13 @@ name = "librs"
 version = "0.1.0"
 
 [[package]]
+name = "log-server"
+version = "0.1.0"
+dependencies = [
+ "librs",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"

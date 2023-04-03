@@ -1,10 +1,10 @@
-use core::{arch::asm, ops::RangeInclusive, time::Duration};
+use core::{arch::asm, mem::size_of, ops::RangeInclusive, time::Duration};
 
 // TODO: merge this with the enum from the kernel
 #[derive(Debug, PartialEq, Eq)]
 pub enum SystemCall {
     Exit = 0,
-    Yield = 1,
+    WaitForMessage = 1,
     Sleep = 2,
     Spawn = 3,
     Allocate = 4,
@@ -13,6 +13,9 @@ pub enum SystemCall {
     Print = 7,
     Read = 8,
     IdentityMap = 9,
+    SendMessage = 10,
+    ReceiveMessage = 11,
+    RegisterServer = 12,
 }
 
 /// Exit the current process.
@@ -22,10 +25,10 @@ pub fn exit() -> ! {
     }
 }
 
-/// Yield the current time slice to another process.
-pub fn yield_proc() {
+/// Sleep until an IPC message is received, useful for implementing servers.
+pub fn wait_for_message() {
     unsafe {
-        asm!("ecall", in("a7") SystemCall::Yield as usize, options(nomem, nostack));
+        asm!("ecall", in("a7") SystemCall::WaitForMessage as usize, options(nomem, nostack));
     }
 }
 
@@ -101,5 +104,71 @@ pub fn identity_map(range: RangeInclusive<u64>) {
     let end = *range.end();
     unsafe {
         asm!("ecall", in("a7") SystemCall::IdentityMap as usize, in("a0") start, in("a1") end, options(nomem, nostack));
+    }
+}
+
+/// Send a message to the server with the given ID. The ID is zero-extended to 16 bytes. Panics if the server does not exist.
+pub fn send_message<T, B>(server_id: T, message: B)
+where
+    T: AsRef<[u8]>,
+    B: AsRef<[u8]>,
+{
+    // Zero-extend the name, if necessary.
+    let id: [u8; 16] = if server_id.as_ref().len() != 16 {
+        let len = server_id.as_ref().len().min(16);
+        let mut id = [0u8; 16];
+        id[..len].copy_from_slice(server_id.as_ref());
+        id
+    } else {
+        server_id.as_ref().try_into().unwrap()
+    };
+
+    let id_msb = u64::from_be_bytes(id.as_ref()[..size_of::<u64>()].try_into().unwrap());
+    let id_lsb = u64::from_be_bytes(id.as_ref()[size_of::<u64>()..].try_into().unwrap());
+
+    let msg_ptr = message.as_ref().as_ptr();
+    let msg_len = message.as_ref().len();
+
+    unsafe {
+        asm!("ecall", in("a7") SystemCall::SendMessage as usize, in("a0") id_msb, in("a1") id_lsb, in("a2") msg_ptr, in("a3") msg_len, options(nomem, nostack));
+    }
+}
+
+/// Receive a message from a client, returning the client PID and the message or `None` if there is no message available.
+pub fn receive_message() -> Option<&'static [u8]> {
+    let msg_ptr: *const u8;
+    let msg_len: usize;
+
+    unsafe {
+        asm!("ecall", in("a7") SystemCall::ReceiveMessage as usize, lateout("a0") msg_ptr, lateout("a1") msg_len, options(nomem, nostack));
+    }
+
+    if msg_ptr.is_null() {
+        None
+    } else {
+        Some(unsafe { core::slice::from_raw_parts(msg_ptr, msg_len) })
+    }
+}
+
+/// Register the current process as a server with the given ID. This may panic if the ID is already in use.
+pub fn register_server<T>(server_id: T)
+where
+    T: AsRef<[u8]>,
+{
+    // Zero-extend the name, if necessary.
+    let id: [u8; 16] = if server_id.as_ref().len() != 16 {
+        let len = server_id.as_ref().len().min(16);
+        let mut id = [0u8; 16];
+        id[..len].copy_from_slice(server_id.as_ref());
+        id
+    } else {
+        server_id.as_ref().try_into().unwrap()
+    };
+
+    let id_msb = u64::from_be_bytes(id.as_ref()[..size_of::<u64>()].try_into().unwrap());
+    let id_lsb = u64::from_be_bytes(id.as_ref()[size_of::<u64>()..].try_into().unwrap());
+
+    unsafe {
+        asm!("ecall", in("a7") SystemCall::RegisterServer as usize, in("a0") id_msb, in("a1") id_lsb, options(nomem, nostack));
     }
 }

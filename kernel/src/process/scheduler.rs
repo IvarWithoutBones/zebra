@@ -1,4 +1,4 @@
-use super::{Process, ProcessState};
+use super::{Process, ProcessState, WaitCondition};
 use crate::{spinlock::Spinlock, trap::clint};
 use alloc::vec::Vec;
 use core::arch::asm;
@@ -28,8 +28,13 @@ impl ProcessList {
         // Let the parent process continue if it was waiting on us
         self.processes
             .iter_mut()
-            .find(|p| p.state == ProcessState::WaitingForChild(proc.pid))
-            .map(|p| p.state = ProcessState::Waiting)
+            .find(|p| match p.state {
+                ProcessState::Waiting(WaitCondition::ChildExit { child_pid }) => {
+                    child_pid == proc.pid
+                }
+                _ => false,
+            })
+            .map(|p| p.state = ProcessState::Ready)
             .unwrap_or(());
 
         Some(proc)
@@ -51,12 +56,16 @@ impl ProcessList {
         self.processes.get_mut(self.current?)
     }
 
-    pub fn handle_sleeping(&mut self) {
+    pub fn find_by_pid(&mut self, pid: usize) -> Option<&mut Process> {
+        self.processes.iter_mut().find(|p| p.pid == pid)
+    }
+
+    pub fn update_waiting(&mut self) {
         let now = clint::time_since_bootup();
         for proc in self.processes.iter_mut() {
-            if let ProcessState::Sleeping(until) = proc.state {
-                if now >= until {
-                    proc.state = ProcessState::Waiting;
+            if let ProcessState::Waiting(WaitCondition::Duration(duration)) = proc.state {
+                if now >= duration {
+                    proc.state = ProcessState::Ready;
                 }
             }
         }
@@ -74,7 +83,7 @@ pub fn schedule() -> ! {
         .lock_with(|procs| {
             if let Some(current) = procs.current() {
                 if current.state == ProcessState::Running {
-                    current.state = ProcessState::Waiting;
+                    current.state = ProcessState::Ready;
                 }
             }
 
@@ -83,7 +92,7 @@ pub fn schedule() -> ! {
 
             // Find a process that is waiting to run
             let mut i = 0;
-            while unsafe { &*next_proc }.state != ProcessState::Waiting {
+            while unsafe { &*next_proc }.state != ProcessState::Ready {
                 next_proc = procs.next().expect("no processes to schedule") as *const _ as _;
 
                 // If we checked all others, sleep until an interrupt occurs (will most likely be the CLINT's timer)
@@ -91,7 +100,7 @@ pub fn schedule() -> ! {
                 i += 1;
                 if i > procs.processes.len() {
                     unsafe { asm!("wfi") }
-                    procs.handle_sleeping();
+                    procs.update_waiting();
                     i = 0;
                 }
             }

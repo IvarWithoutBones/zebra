@@ -11,12 +11,13 @@ use librs::syscall;
 
 // Filesystems are bloatware
 const HELLO_ELF: &[u8] = include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/hello");
-const USERNAME: &str = "someone";
+const LOG_ELF: &[u8] =
+    include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/log-server");
 
 const SLEEP_DURATION: Duration = Duration::from_millis(20);
 
 fn print_prefix() {
-    print!("[{USERNAME}@zebra:~]$ ");
+    print!("$ ");
 }
 
 fn handle_command(line: &str) {
@@ -40,6 +41,11 @@ fn handle_command(line: &str) {
             syscall::spawn(HELLO_ELF, false);
         }
 
+        "log" => {
+            let args = iter.collect::<Vec<_>>().join(" ");
+            syscall::send_message(b"log", args.as_bytes());
+        }
+
         "sleep" => {
             let secs: u64 = iter.next().unwrap().parse().unwrap();
             let duration = Duration::from_secs(secs);
@@ -54,7 +60,6 @@ fn handle_command(line: &str) {
         }
 
         // Not to pat myself on the back too much but modern shells can learn a thing or two from this
-        "whoami" => println!("{USERNAME}"),
         "uname" => println!("Zebra"),
         "ls" => println!("Downloads Documents Pictures Music Videos foo.sh"),
         "./foo.sh" => println!("hello world"),
@@ -66,6 +71,9 @@ fn handle_command(line: &str) {
 }
 
 fn main() {
+    // Until an `init` process exists
+    syscall::spawn(LOG_ELF, false);
+
     println!("welcome to knockoff bash");
     print_prefix();
 
