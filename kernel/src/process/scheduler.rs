@@ -1,29 +1,27 @@
 use super::{Process, ProcessState, WaitCondition};
 use crate::{spinlock::Spinlock, trap::clint};
-use alloc::vec::Vec;
+use alloc::collections::VecDeque;
 use core::arch::asm;
 
 pub static PROCESSES: Spinlock<ProcessList> = Spinlock::new(ProcessList::new());
 
 pub struct ProcessList {
-    processes: Vec<Process>,
-    current: Option<usize>,
+    processes: VecDeque<Process>,
 }
 
 impl ProcessList {
     const fn new() -> Self {
         Self {
-            processes: Vec::new(),
-            current: None,
+            processes: VecDeque::new(),
         }
     }
 
     pub fn push(&mut self, process: Process) {
-        self.processes.push(process);
+        self.processes.push_back(process);
     }
 
     pub fn remove_current(&mut self) -> Option<Process> {
-        let proc = self.processes.remove(self.current?);
+        let proc = self.processes.pop_front()?;
 
         // Let the parent process continue if it was waiting on us
         self.processes
@@ -41,19 +39,12 @@ impl ProcessList {
     }
 
     pub fn next(&mut self) -> Option<&Process> {
-        let next = self.current.map_or(0, |curr| {
-            curr.wrapping_add(1)
-                .checked_rem(self.processes.len())
-                .unwrap_or(0)
-        });
-
-        let result = self.processes.get(next)?;
-        self.current = Some(next);
-        Some(result)
+        self.processes.rotate_right(1);
+        self.processes.front()
     }
 
     pub fn current(&mut self) -> Option<&mut Process> {
-        self.processes.get_mut(self.current?)
+        self.processes.front_mut()
     }
 
     pub fn find_by_pid(&mut self, pid: usize) -> Option<&mut Process> {
