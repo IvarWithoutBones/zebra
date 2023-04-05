@@ -1,48 +1,56 @@
 use crate::spinlock::Spinlock;
-use alloc::vec::Vec;
+use alloc::{collections::VecDeque, vec::Vec};
+use core::sync::atomic::{AtomicU64, Ordering};
 
 static SERVER_LIST: Spinlock<ServerList> = Spinlock::new(ServerList::new());
+static NEXT_SERVER_ID: AtomicU64 = AtomicU64::new(1);
 
-const MAX_MESSAGES: usize = 32;
-
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Message {
-    pub pointer: *mut u8,
-    pub length: usize,
+    pub identifier: u64,
+    pub data: u64,
+    pub sender_pid: usize,
+}
+
+impl Message {
+    pub const fn new(sender: usize, identifier: u64, data: u64) -> Self {
+        Self {
+            sender_pid: sender,
+            identifier,
+            data,
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct Server {
     pub process_id: usize,
-    server_id: u128,
-
-    pub messages: [Option<Message>; MAX_MESSAGES],
-    current_message: usize,
+    pub server_id: u64,
+    messages: VecDeque<Message>,
 }
 
 impl Server {
-    fn new(process_id: usize, server_id: u128) -> Self {
+    fn new(process_id: usize, public_name: Option<u64>) -> Self {
+        let server_id =
+            public_name.unwrap_or_else(|| NEXT_SERVER_ID.fetch_add(1, Ordering::SeqCst));
+
         Self {
             process_id,
             server_id,
-            messages: [None; MAX_MESSAGES],
-            current_message: 0,
+            messages: VecDeque::new(),
         }
     }
 
-    fn next_message(&mut self) {
-        self.current_message = (self.current_message + 1) % MAX_MESSAGES;
+    pub fn has_messages(&self) -> bool {
+        !self.messages.is_empty()
     }
 
-    pub fn send_message(&mut self, pointer: *mut u8, len: usize) {
-        let message = Message { pointer, length: len };
-        self.messages[self.current_message] = Some(message);
+    pub fn send_message(&mut self, message: Message) {
+        self.messages.push_back(message);
     }
 
     pub fn receive_message(&mut self) -> Option<Message> {
-        let message = self.messages.get_mut(self.current_message)?.take();
-        self.next_message();
-        message
+        self.messages.pop_front()
     }
 }
 
@@ -58,21 +66,28 @@ impl ServerList {
         }
     }
 
-    pub fn register(&mut self, server_id: u128, process_id: usize) -> Option<()> {
-        let server = Server::new(process_id, server_id);
-        if self.servers.iter().any(|s| s.server_id == server_id) {
+    pub fn register(&mut self, process_id: usize, server_id: Option<u64>) -> Option<u64> {
+        if self.servers.iter().any(|s| s.process_id == process_id) {
             return None;
         }
 
+        if let Some(server_id) = server_id {
+            if self.servers.iter().any(|s| s.server_id == server_id) {
+                return None;
+            }
+        }
+
+        let server = Server::new(process_id, server_id);
+        let server_id = server.server_id;
         self.servers.push(server);
-        Some(())
+        Some(server_id)
     }
 
     pub fn get_by_pid(&mut self, process_id: usize) -> Option<&mut Server> {
         self.servers.iter_mut().find(|s| s.process_id == process_id)
     }
 
-    pub fn get_by_sid(&mut self, server_id: u128) -> Option<&mut Server> {
+    pub fn get_by_sid(&mut self, server_id: u64) -> Option<&mut Server> {
         self.servers.iter_mut().find(|s| s.server_id == server_id)
     }
 }

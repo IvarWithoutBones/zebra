@@ -1,5 +1,5 @@
-use super::{Process, ProcessState, WaitCondition};
-use crate::{spinlock::Spinlock, trap::clint};
+use super::{Process, ProcessState};
+use crate::{ipc, spinlock::Spinlock, trap::clint};
 use alloc::collections::VecDeque;
 use core::arch::asm;
 
@@ -27,9 +27,7 @@ impl ProcessList {
         self.processes
             .iter_mut()
             .find(|p| match p.state {
-                ProcessState::Waiting(WaitCondition::ChildExit { child_pid }) => {
-                    child_pid == proc.pid
-                }
+                ProcessState::ChildExited { child_pid } => child_pid == proc.pid,
                 _ => false,
             })
             .map(|p| p.state = ProcessState::Ready)
@@ -38,9 +36,9 @@ impl ProcessList {
         Some(proc)
     }
 
-    pub fn next(&mut self) -> Option<&Process> {
+    pub fn next(&mut self) -> Option<&mut Process> {
         self.processes.rotate_right(1);
-        self.processes.front()
+        self.processes.front_mut()
     }
 
     pub fn current(&mut self) -> Option<&mut Process> {
@@ -50,17 +48,6 @@ impl ProcessList {
     pub fn find_by_pid(&mut self, pid: usize) -> Option<&mut Process> {
         self.processes.iter_mut().find(|p| p.pid == pid)
     }
-
-    pub fn update_waiting(&mut self) {
-        let now = clint::time_since_bootup();
-        for proc in self.processes.iter_mut() {
-            if let ProcessState::Waiting(WaitCondition::Duration(duration)) = proc.state {
-                if now >= duration {
-                    proc.state = ProcessState::Ready;
-                }
-            }
-        }
-    }
 }
 
 pub fn insert(process: Process) {
@@ -68,35 +55,63 @@ pub fn insert(process: Process) {
 }
 
 pub fn schedule() -> ! {
-    // We need a reference to the process that remains valid *after* dropping the PROCESSES lock,
-    // should probably use a smart pointer instead of the unsafe raw pointer.
-    PROCESSES
-        .lock_with(|procs| {
+    loop {
+        let proc: Option<&mut Process> = PROCESSES.lock_with(|procs| {
             if let Some(current) = procs.current() {
                 if current.state == ProcessState::Running {
                     current.state = ProcessState::Ready;
                 }
             }
 
-            let mut next_proc: *mut Process =
-                procs.next().expect("no processes to schedule") as *const _ as _;
-
-            // Find a process that is waiting to run
+            let len = procs.processes.len();
             let mut i = 0;
-            while unsafe { &*next_proc }.state != ProcessState::Ready {
-                next_proc = procs.next().expect("no processes to schedule") as *const _ as _;
-
-                // If we checked all others, sleep until an interrupt occurs (will most likely be the CLINT's timer)
-                // TODO: This is not a very robust solution at all, it is just a placeholder.
-                i += 1;
-                if i > procs.processes.len() {
-                    unsafe { asm!("wfi") }
-                    procs.update_waiting();
-                    i = 0;
+            let mut next_proc = procs.next().expect("no processes to schedule");
+            loop {
+                if i > len {
+                    return None;
                 }
+
+                match next_proc.state {
+                    ProcessState::Ready => break,
+
+                    ProcessState::Sleeping { duration } => {
+                        if clint::time_since_bootup() >= duration {
+                            next_proc.state = ProcessState::Ready;
+                            break;
+                        }
+                    }
+
+                    ProcessState::MessageSent { receiver_sid } => {
+                        let mut server_list = ipc::server_list().lock();
+                        let server = server_list.get_by_sid(receiver_sid).unwrap();
+
+                        if server.has_messages() {
+                            if let Some(server_proc) = procs.find_by_pid(server.process_id) {
+                                if let ProcessState::MessageReceived = server_proc.state {
+                                    server_proc.state = ProcessState::Ready;
+                                }
+                            }
+                        }
+                    }
+
+                    _ => (),
+                }
+
+                next_proc = procs.next().expect("no processes to schedule");
+                i += 1;
             }
 
-            unsafe { &mut *next_proc }
-        })
-        .run()
+            // We need a reference to the process that remains valid *after* dropping the PROCESSES lock,
+            // should probably use a smart pointer instead of the unsafe raw pointer.
+            let next_proc = next_proc as *mut _ as *mut Process;
+            Some(unsafe { &mut *next_proc })
+        });
+
+        if let Some(proc) = proc {
+            proc.run()
+        } else {
+            // We should never get here unless all processes are non-runnable, in which case we wait for an interrupt to wake us up to avoid a busy loop.
+            unsafe { asm!("wfi") }
+        }
+    }
 }

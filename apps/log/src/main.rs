@@ -16,14 +16,17 @@ fn print(buf: &[u8]) {
 }
 
 fn main() {
+    syscall::register_server(Some(u64::from_ne_bytes(*b"log\0\0\0\0\0"))).unwrap();
     syscall::identity_map(UART_BASE..=UART_BASE + 1);
-    syscall::register_server(b"log");
 
     loop {
         while let Some(msg) = syscall::receive_message() {
-            print(msg);
+            if msg.0 == 1 {
+                let buf = msg.1.to_be_bytes();
+                print(&buf);
+            }
         }
 
-        syscall::wait_for_message();
+        syscall::wait_until_message_received();
     }
 }

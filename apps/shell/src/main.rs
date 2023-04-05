@@ -41,11 +41,6 @@ fn handle_command(line: &str) {
             syscall::spawn(HELLO_ELF, false);
         }
 
-        "log" => {
-            let args = iter.collect::<Vec<_>>().join(" ");
-            syscall::send_message(b"log", args.as_bytes());
-        }
-
         "sleep" => {
             let secs: u64 = iter.next().unwrap().parse().unwrap();
             let duration = Duration::from_secs(secs);
@@ -73,6 +68,7 @@ fn handle_command(line: &str) {
 fn main() {
     // Until an `init` process exists
     syscall::spawn(LOG_ELF, false);
+    syscall::sleep(SLEEP_DURATION); // Dont print before the log server is set up
 
     println!("welcome to knockoff bash");
     print_prefix();

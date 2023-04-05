@@ -1,7 +1,12 @@
-use super::{scheduler, trapframe::Registers, Process, ProcessState, WaitCondition};
-use crate::{ipc, memory, trap::clint, uart};
+use super::{scheduler, trapframe::Registers, Process, ProcessState};
+use crate::{
+    ipc::{self, Message},
+    memory,
+    trap::clint,
+    uart,
+};
 use bitbybit::bitenum;
-use core::{mem::size_of, time::Duration};
+use core::time::Duration;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SystemCallError {
@@ -12,13 +17,12 @@ pub enum SystemCallError {
 #[bitenum(u64)]
 pub enum SystemCall {
     Exit = 0,
-    WaitForMessage = 1,
+    WaitUntilMessageReceived = 1,
     Sleep = 2,
     Spawn = 3,
     Allocate = 4,
     Deallocate = 5,
     DurationSinceBootup = 6,
-    Print = 7,
     Read = 8,
     IdentityMap = 9,
     SendMessage = 10,
@@ -34,7 +38,7 @@ impl TryFrom<u64> for SystemCall {
     }
 }
 
-pub fn handle() {
+pub fn handle() -> Option<()> {
     let mut procs = scheduler::PROCESSES.lock();
     let proc = procs.current().unwrap();
     let syscall = SystemCall::try_from(proc.trap_frame.registers[Registers::A7 as usize]);
@@ -47,29 +51,6 @@ pub fn handle() {
             SystemCall::Exit => {
                 let pid = procs.remove_current().unwrap().pid;
                 println!("process {pid} gracefully exited");
-            }
-
-            SystemCall::WaitForMessage => {
-                proc.state = ProcessState::Waiting(WaitCondition::MessageReceived);
-            }
-
-            SystemCall::Print => {
-                let str = {
-                    let string_ptr = proc.trap_frame.registers[Registers::A0 as usize];
-                    let len = proc.trap_frame.registers[Registers::A1 as usize];
-
-                    let ptr = proc.page_table.physical_addr(string_ptr as _).unwrap();
-                    // Surely there is no security risk associated with returning arbitrary kernel memory to the end user, with no bounds checking
-                    let source = unsafe { core::slice::from_raw_parts(ptr as *const u8, len as _) };
-                    core::str::from_utf8(source)
-                };
-
-                if let Ok(str) = str {
-                    print!("{str}");
-                } else {
-                    let pid = procs.remove_current().unwrap().pid;
-                    println!("invalid string passed from {pid} to SystemCall::Print: {str:?}. Killing process");
-                }
             }
 
             SystemCall::Read => {
@@ -122,16 +103,16 @@ pub fn handle() {
                 let blocking = proc.trap_frame.registers[Registers::A2 as usize] != 0;
 
                 let elf = {
-                    let elf_ptr = { proc.page_table.physical_addr(elf_ptr as _).unwrap() };
+                    let elf_ptr = { proc.page_table.physical_addr(elf_ptr as _)? };
                     // The safety concerns from SystemCall::Print apply here as well
                     unsafe { core::slice::from_raw_parts(elf_ptr as *const u8, elf_size as _) }
                 };
 
                 let new_proc = if blocking {
                     let new_proc = Process::new(elf);
-                    proc.state = ProcessState::Waiting(WaitCondition::ChildExit {
+                    proc.state = ProcessState::ChildExited {
                         child_pid: new_proc.pid,
-                    });
+                    };
                     new_proc
                 } else {
                     Process::new(elf)
@@ -153,8 +134,8 @@ pub fn handle() {
                     Duration::new(seconds, nanoseconds)
                 };
 
-                let wakeup_time = clint::time_since_bootup() + duration;
-                proc.state = ProcessState::Waiting(WaitCondition::Duration(wakeup_time));
+                let duration = clint::time_since_bootup() + duration;
+                proc.state = ProcessState::Sleeping { duration };
             }
 
             // TODO: Capabilities, not every process should be allowed to do this.
@@ -175,31 +156,23 @@ pub fn handle() {
                 );
             }
 
+            SystemCall::WaitUntilMessageReceived => {
+                proc.state = ProcessState::MessageReceived;
+            }
+
             SystemCall::SendMessage => {
-                let server_id: u128 = {
-                    let msb = proc.trap_frame.registers[Registers::A0 as usize];
-                    let lsb = proc.trap_frame.registers[Registers::A1 as usize];
-
-                    let mut id = [0u8; size_of::<u128>()];
-                    id[..size_of::<u64>()].copy_from_slice(&msb.to_be_bytes());
-                    id[size_of::<u64>()..].copy_from_slice(&lsb.to_be_bytes());
-                    u128::from_be_bytes(id)
-                };
-
-                let message_ptr = {
-                    let message_ptr = proc.trap_frame.registers[Registers::A2 as usize];
-                    proc.page_table.physical_addr(message_ptr as _).unwrap()
-                };
-                let message_len = proc.trap_frame.registers[Registers::A3 as usize];
+                let server_id = proc.trap_frame.registers[Registers::A0 as usize];
+                let identifier = proc.trap_frame.registers[Registers::A1 as usize];
+                let data = proc.trap_frame.registers[Registers::A2 as usize];
 
                 if let Some(server) = ipc::server_list().lock().get_by_sid(server_id) {
-                    server.send_message(message_ptr as _, message_len as _);
+                    server.send_message(Message::new(proc.pid, identifier, data));
 
-                    let server_proc = procs.find_by_pid(server.process_id).unwrap();
-                    // if let ProcessState::Waiting(WaitCondition::MessageReceived) = server_proc.state
-                    // {
-                        server_proc.state = ProcessState::Ready;
-                    // }
+                    proc.state = ProcessState::MessageSent {
+                        receiver_sid: server.server_id,
+                    };
+
+                    procs.find_by_pid(server.process_id)?.state = ProcessState::Ready;
                 } else {
                     let pid = procs.remove_current().unwrap().pid;
                     println!("process {pid} tried to send a message to a non-existent server {server_id}. Killing process");
@@ -207,55 +180,44 @@ pub fn handle() {
             }
 
             SystemCall::ReceiveMessage => {
-                if let Some(msg) = ipc::server_list()
-                    .lock()
-                    .get_by_pid(proc.pid)
-                    .unwrap()
-                    .receive_message()
-                {
-                    let msg_ptr = msg.pointer;
-                    let msg_len = msg.length;
+                let mut server_list = ipc::server_list().lock();
+                let server = server_list.get_by_pid(proc.pid).unwrap();
 
-                    // Map the pointer into the process' address space, without copying the data.
-                    // This only works because the syscall::Allocate identity maps the memory from by the kernel,
-                    proc.page_table.identity_map(
-                        msg_ptr as usize,
-                        msg_ptr as usize + msg_len,
-                        memory::page::EntryAttributes::UserRead,
-                    );
+                if let Some(msg) = server.receive_message() {
+                    proc.trap_frame.registers[Registers::A0 as usize] = msg.identifier;
+                    proc.trap_frame.registers[Registers::A1 as usize] = msg.data;
 
-                    proc.trap_frame.registers[Registers::A0 as usize] = msg_ptr as _;
-                    proc.trap_frame.registers[Registers::A1 as usize] = msg_len as _;
+                    let mut sender = procs.find_by_pid(msg.sender_pid)?;
+                    if let ProcessState::MessageSent { receiver_sid } = sender.state {
+                        if receiver_sid == server.server_id {
+                            sender.state = ProcessState::Ready;
+                        }
+                    }
                 } else {
-                    proc.trap_frame.registers[Registers::A0 as usize] = 0; // Should probably communicate errors in a better way, but whatever
+                    proc.trap_frame.registers[Registers::A0 as usize] = u64::MAX;
                 }
             }
 
             SystemCall::RegisterServer => {
-                let server_id_msb = proc.trap_frame.registers[Registers::A0 as usize];
-                let server_id_lsb = proc.trap_frame.registers[Registers::A1 as usize];
+                let public_name = proc.trap_frame.registers[Registers::A0 as usize];
 
-                let server_id: u128 = {
-                    let mut server_id = [0u8; size_of::<u128>()];
-                    server_id[..size_of::<u64>()].copy_from_slice(&server_id_msb.to_be_bytes());
-                    server_id[size_of::<u64>()..].copy_from_slice(&server_id_lsb.to_be_bytes());
-                    u128::from_be_bytes(server_id)
+                let server_id = if public_name != 0 {
+                    ipc::server_list()
+                        .lock()
+                        .register(proc.pid, Some(public_name))
+                } else {
+                    ipc::server_list().lock().register(proc.pid, None)
                 };
 
-                if ipc::server_list()
-                    .lock()
-                    .register(server_id, proc.pid)
-                    .is_none()
-                {
-                    let pid = procs.remove_current().unwrap().pid;
-                    println!("process {pid} tried to register a server with an already existing ID {server_id}. Killing process");
-                }
+                proc.trap_frame.registers[Registers::A0 as usize] = server_id.unwrap_or(u64::MAX);
             }
         }
     } else {
         let offender = procs.remove_current().unwrap().pid;
         println!("killed process {offender} because of an invalid system call: {syscall:?}");
     }
+
+    Some(())
 }
 
 #[cfg(test)]
@@ -265,14 +227,17 @@ mod tests {
     #[test_case]
     fn raw_value() {
         assert_eq!(SystemCall::Exit.raw_value(), 0);
-        assert_eq!(SystemCall::WaitForMessage.raw_value(), 1);
+        assert_eq!(SystemCall::WaitUntilMessageReceived.raw_value(), 1);
         assert_eq!(SystemCall::Sleep.raw_value(), 2);
     }
 
     #[test_case]
     fn parse_valid() {
         assert_eq!(SystemCall::Exit, SystemCall::try_from(0).unwrap());
-        assert_eq!(SystemCall::WaitForMessage, SystemCall::try_from(1).unwrap());
+        assert_eq!(
+            SystemCall::WaitUntilMessageReceived,
+            SystemCall::try_from(1).unwrap()
+        );
         assert_eq!(SystemCall::Sleep, SystemCall::try_from(2).unwrap());
     }
 

@@ -25,17 +25,13 @@ extern "C" {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum WaitCondition {
-    Duration(Duration),
-    ChildExit { child_pid: usize },
-    MessageReceived,
-}
-
-#[derive(Debug, PartialEq, Eq)]
 enum ProcessState {
     Running,
     Ready,
-    Waiting(WaitCondition),
+    Sleeping { duration: Duration },
+    ChildExited { child_pid: usize },
+    MessageSent { receiver_sid: u64 },
+    MessageReceived,
 }
 
 #[repr(C)]
