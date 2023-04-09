@@ -3,7 +3,6 @@ use crate::{
     ipc::{self, Message},
     memory,
     trap::clint,
-    uart,
 };
 use bitbybit::bitenum;
 use core::time::Duration;
@@ -23,7 +22,6 @@ pub enum SystemCall {
     Allocate = 4,
     Deallocate = 5,
     DurationSinceBootup = 6,
-    Read = 8,
     IdentityMap = 9,
     SendMessage = 10,
     ReceiveMessage = 11,
@@ -51,16 +49,6 @@ pub fn handle() -> Option<()> {
             SystemCall::Exit => {
                 let pid = procs.remove_current().unwrap().pid;
                 println!("process {pid} gracefully exited");
-            }
-
-            SystemCall::Read => {
-                let result = uart::UART.lock_with(|uart| uart.poll());
-                if let Some(result) = result {
-                    proc.trap_frame.registers[Registers::A0 as usize] = result as _;
-                } else {
-                    // TODO: What would be a better way to indicate that there is no data available?
-                    proc.trap_frame.registers[Registers::A0 as usize] = 0;
-                }
             }
 
             SystemCall::Allocate => {
@@ -165,8 +153,17 @@ pub fn handle() -> Option<()> {
                 let identifier = proc.trap_frame.registers[Registers::A1 as usize];
                 let data = proc.trap_frame.registers[Registers::A2 as usize];
 
-                if let Some(server) = ipc::server_list().lock().get_by_sid(server_id) {
-                    server.send_message(Message::new(proc.pid, identifier, data));
+                let mut server_list = ipc::server_list().lock();
+                let curr_sid = if let Some(server) = server_list.get_by_pid(proc.pid) {
+                    server.server_id
+                } else {
+                    let pid = procs.remove_current().unwrap().pid;
+                    println!("process {pid} tried to send a message without being a server. Killing process");
+                    return None;
+                };
+
+                if let Some(server) = server_list.get_by_sid(server_id) {
+                    server.send_message(Message::new(proc.pid, curr_sid, identifier, data));
 
                     proc.state = ProcessState::MessageSent {
                         receiver_sid: server.server_id,
@@ -186,6 +183,7 @@ pub fn handle() -> Option<()> {
                 if let Some(msg) = server.receive_message() {
                     proc.trap_frame.registers[Registers::A0 as usize] = msg.identifier;
                     proc.trap_frame.registers[Registers::A1 as usize] = msg.data;
+                    proc.trap_frame.registers[Registers::A2 as usize] = msg.sender_sid;
 
                     let mut sender = procs.find_by_pid(msg.sender_pid)?;
                     if let ProcessState::MessageSent { receiver_sid } = sender.state {

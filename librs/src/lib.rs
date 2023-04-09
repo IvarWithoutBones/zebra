@@ -6,8 +6,13 @@
 #[macro_use]
 pub mod print;
 pub mod allocator;
+pub mod ipc;
 pub mod syscall;
 pub mod test;
+
+extern "C" {
+    fn __zebra_main();
+}
 
 /// Defines the entry point of the program, which is called by the `librs` runtime.
 #[macro_export]
@@ -25,10 +30,6 @@ macro_rules! main {
             function();
         }
     };
-}
-
-extern "C" {
-    fn __zebra_main();
 }
 
 #[no_mangle]

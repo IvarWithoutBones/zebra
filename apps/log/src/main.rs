@@ -3,9 +3,16 @@
 #![no_std]
 #![no_main]
 
-use librs::syscall;
+use librs::{ipc, syscall};
 
 librs::main!(main);
+
+const ID_WRITE: u64 = 1;
+const ID_READ: u64 = 2;
+
+const REPLY_DATA_NOT_READY: u64 = 0;
+const REPLY_DATA_READY: u64 = 1;
+const REPLY_REQUEST_UNKNOWN: u64 = u64::MAX;
 
 const UART_BASE: u64 = 0x1000_0000;
 
@@ -15,18 +22,38 @@ fn print(buf: &[u8]) {
     }
 }
 
+fn read() -> Option<u8> {
+    let status = unsafe { (UART_BASE as *mut u8).add(5).read_volatile() };
+    if status & 1 == 1 {
+        Some(unsafe { (UART_BASE as *mut u8).read_volatile() })
+    } else {
+        None
+    }
+}
+
 fn main() {
-    syscall::register_server(Some(u64::from_ne_bytes(*b"log\0\0\0\0\0"))).unwrap();
-    syscall::identity_map(UART_BASE..=UART_BASE + 1);
+    syscall::register_server(Some(u64::from_le_bytes(*b"log\0\0\0\0\0"))).unwrap();
+    syscall::identity_map(UART_BASE..=UART_BASE + 5);
 
     loop {
-        while let Some(msg) = syscall::receive_message() {
-            if msg.0 == 1 {
-                let buf = msg.1.to_be_bytes();
-                print(&buf);
-            }
-        }
+        let msg = ipc::Message::receive_blocking();
+        let reply = ipc::MessageBuilder::new(msg.server_id);
 
-        syscall::wait_until_message_received();
+        match msg.identifier {
+            ID_WRITE => print(&msg.data.to_be_bytes()),
+
+            ID_READ => {
+                if let Some(b) = read() {
+                    reply
+                        .with_identifier(REPLY_DATA_READY)
+                        .with_data(b as u64)
+                        .send();
+                } else {
+                    reply.with_identifier(REPLY_DATA_NOT_READY).send();
+                }
+            }
+
+            _ => reply.with_identifier(REPLY_REQUEST_UNKNOWN).send(),
+        }
     }
 }

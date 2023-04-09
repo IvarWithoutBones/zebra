@@ -7,7 +7,7 @@ librs::main!(main);
 
 use alloc::{string::String, vec::Vec};
 use core::time::Duration;
-use librs::syscall;
+use librs::{ipc, syscall};
 
 // Filesystems are bloatware
 const HELLO_ELF: &[u8] = include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/hello");
@@ -65,7 +65,26 @@ fn handle_command(line: &str) {
     }
 }
 
+const UART_SID: u64 = u64::from_ne_bytes(*b"log\0\0\0\0\0");
+const READ_MSG: ipc::Message = ipc::MessageBuilder::new(UART_SID)
+    .with_identifier(2) // ID_READ
+    .build();
+
+fn read() -> Option<char> {
+    if let Some(msg) = READ_MSG.send_receive() {
+        if msg.identifier == 1 {
+            Some(msg.data as u8 as char)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 fn main() {
+    syscall::register_server(None);
+
     // Until an `init` process exists
     syscall::spawn(LOG_ELF, false);
     syscall::sleep(SLEEP_DURATION); // Dont print before the log server is set up
@@ -76,7 +95,7 @@ fn main() {
     let mut command = String::with_capacity(0x100);
 
     loop {
-        if let Some(c) = syscall::read() {
+        if let Some(c) = read() {
             match c {
                 // Enter
                 '\r' => {
