@@ -14,12 +14,7 @@ pub struct Message {
 }
 
 impl Message {
-    pub const fn new(
-        sender_pid: usize,
-        sender_sid: u64,
-        identifier: u64,
-        data: u64,
-    ) -> Self {
+    pub const fn new(sender_pid: usize, sender_sid: u64, identifier: u64, data: u64) -> Self {
         Self {
             sender_sid,
             sender_pid,

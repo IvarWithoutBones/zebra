@@ -4,56 +4,45 @@
 #![no_main]
 
 use librs::{ipc, syscall};
+use log_server::{Reply, Request};
 
 librs::main!(main);
 
-const ID_WRITE: u64 = 1;
-const ID_READ: u64 = 2;
-
-const REPLY_DATA_NOT_READY: u64 = 0;
-const REPLY_DATA_READY: u64 = 1;
-const REPLY_REQUEST_UNKNOWN: u64 = u64::MAX;
-
-const UART_BASE: u64 = 0x1000_0000;
-
-fn print(buf: &[u8]) {
-    for b in buf {
-        unsafe { (UART_BASE as *mut u8).write_volatile(*b) }
-    }
-}
-
-fn read() -> Option<u8> {
-    let status = unsafe { (UART_BASE as *mut u8).add(5).read_volatile() };
-    if status & 1 == 1 {
-        Some(unsafe { (UART_BASE as *mut u8).read_volatile() })
-    } else {
-        None
-    }
-}
+// NOTE: this is never initialized as that will be done by the kernel for debug purposes
+static UART: uart::NS16550a = uart::NS16550a::DEFAULT;
 
 fn main() {
     syscall::register_server(Some(u64::from_le_bytes(*b"log\0\0\0\0\0"))).unwrap();
-    syscall::identity_map(UART_BASE..=UART_BASE + 5);
+    syscall::identity_map(uart::BASE_ADDR..=uart::BASE_ADDR + 5);
 
     loop {
         let msg = ipc::Message::receive_blocking();
         let reply = ipc::MessageBuilder::new(msg.server_id);
 
-        match msg.identifier {
-            ID_WRITE => print(&msg.data.to_be_bytes()),
-
-            ID_READ => {
-                if let Some(b) = read() {
+        match Request::from(msg) {
+            Request::Read => {
+                if let Some(b) = UART.poll() {
                     reply
-                        .with_identifier(REPLY_DATA_READY)
+                        .with_identifier(Reply::DataReady { data: b }.to_identifier())
                         .with_data(b as u64)
                         .send();
                 } else {
-                    reply.with_identifier(REPLY_DATA_NOT_READY).send();
+                    reply
+                        .with_identifier(Reply::DataNotReady.to_identifier())
+                        .send();
                 }
             }
 
-            _ => reply.with_identifier(REPLY_REQUEST_UNKNOWN).send(),
+            Request::Write { data } => {
+                data.to_be_bytes().iter().for_each(|b| UART.write_byte(*b));
+            }
+
+            Request::Unknown { id } => {
+                reply
+                    .with_identifier(Reply::RequestUnknown.to_identifier())
+                    .with_data(id)
+                    .send();
+            }
         }
     }
 }

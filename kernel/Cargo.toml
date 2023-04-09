@@ -10,3 +10,6 @@ bitbybit = "1.1.2"
 [dependencies.binrw]
 version = "0.11.1"
 default-features = false
+
+[dependencies.uart]
+path = "../libs/uart"

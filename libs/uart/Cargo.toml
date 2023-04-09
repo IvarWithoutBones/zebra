@@ -1,0 +1,9 @@
+[package]
+name = "uart"
+version = "0.1.0"
+edition = "2021"
+description = "Driver for the NS16550a UART"
+
+[dependencies]
+arbitrary-int = "1.2.3"
+bitbybit = "1.1.2"

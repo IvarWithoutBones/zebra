@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies.librs]
-path = "../../librs"
+path = "../../libs/librs"

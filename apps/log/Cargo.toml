@@ -3,5 +3,11 @@ name = "log-server"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+path = "src/lib.rs"
+
 [dependencies.librs]
-path = "../../librs"
+path = "../../libs/librs"
+
+[dependencies.uart]
+path = "../../libs/uart"

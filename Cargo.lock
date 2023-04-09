@@ -77,6 +77,7 @@ name = "log-server"
 version = "0.1.0"
 dependencies = [
  "librs",
+ "uart",
 ]
 
 [[package]]
@@ -102,6 +103,7 @@ name = "shell"
 version = "0.1.0"
 dependencies = [
  "librs",
+ "log-server",
 ]
 
 [[package]]
@@ -113,6 +115,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "uart"
+version = "0.1.0"
+dependencies = [
+ "arbitrary-int",
+ "bitbybit",
 ]
 
 [[package]]
@@ -128,4 +138,5 @@ dependencies = [
  "arbitrary-int",
  "binrw",
  "bitbybit",
+ "uart",
 ]

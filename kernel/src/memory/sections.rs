@@ -84,8 +84,8 @@ pub fn map_kernel(page_table: &mut page::Table) {
     );
 
     page_table.map_page(
-        uart::BASE_ADDR,
-        uart::BASE_ADDR,
+        uart::BASE_ADDR as _,
+        uart::BASE_ADDR as _,
         page::EntryAttributes::ReadWrite,
     );
 
