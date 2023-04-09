@@ -71,6 +71,9 @@ dependencies = [
 [[package]]
 name = "librs"
 version = "0.1.0"
+dependencies = [
+ "syscall",
+]
 
 [[package]]
 name = "log-server"
@@ -118,6 +121,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "syscall"
+version = "0.1.0"
+dependencies = [
+ "bitbybit",
+]
+
+[[package]]
 name = "uart"
 version = "0.1.0"
 dependencies = [
@@ -138,5 +148,6 @@ dependencies = [
  "arbitrary-int",
  "binrw",
  "bitbybit",
+ "syscall",
  "uart",
 ]

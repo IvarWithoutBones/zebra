@@ -1,20 +1,5 @@
 use core::{arch::asm, ops::RangeInclusive, time::Duration};
-
-// TODO: merge this with the enum from the kernel
-#[derive(Debug, PartialEq, Eq)]
-pub enum SystemCall {
-    Exit = 0,
-    Sleep = 2,
-    Spawn = 3,
-    Allocate = 4,
-    Deallocate = 5,
-    DurationSinceBootup = 6,
-    IdentityMap = 9,
-    WaitUntilMessageReceived = 1,
-    SendMessage = 10,
-    ReceiveMessage = 11,
-    RegisterServer = 12,
-}
+use syscall::SystemCall;
 
 /// Exit the current process.
 pub fn exit() -> ! {
@@ -26,7 +11,7 @@ pub fn exit() -> ! {
 /// Sleep until an IPC message is received, useful for implementing servers.
 pub fn wait_until_message_received() {
     unsafe {
-        asm!("ecall", in("a7") SystemCall::WaitUntilMessageReceived as usize, options(nomem, nostack));
+        asm!("ecall", in("a7") SystemCall::SleepUntilMessageReceived as usize, options(nomem, nostack));
     }
 }
 

@@ -4,37 +4,8 @@ use crate::{
     memory,
     trap::clint,
 };
-use bitbybit::bitenum;
 use core::time::Duration;
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum SystemCallError {
-    Invalid(u64),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-#[bitenum(u64)]
-pub enum SystemCall {
-    Exit = 0,
-    WaitUntilMessageReceived = 1,
-    Sleep = 2,
-    Spawn = 3,
-    Allocate = 4,
-    Deallocate = 5,
-    DurationSinceBootup = 6,
-    IdentityMap = 9,
-    SendMessage = 10,
-    ReceiveMessage = 11,
-    RegisterServer = 12,
-}
-
-impl TryFrom<u64> for SystemCall {
-    type Error = SystemCallError;
-
-    fn try_from(value: u64) -> Result<Self, Self::Error> {
-        Self::new_with_raw_value(value).map_err(SystemCallError::Invalid)
-    }
-}
+use syscall::SystemCall;
 
 pub fn handle() -> Option<()> {
     let mut procs = scheduler::PROCESSES.lock();
@@ -144,7 +115,7 @@ pub fn handle() -> Option<()> {
                 );
             }
 
-            SystemCall::WaitUntilMessageReceived => {
+            SystemCall::SleepUntilMessageReceived => {
                 proc.state = ProcessState::MessageReceived;
             }
 
@@ -221,11 +192,12 @@ pub fn handle() -> Option<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use syscall::SystemCallError;
 
     #[test_case]
     fn raw_value() {
         assert_eq!(SystemCall::Exit.raw_value(), 0);
-        assert_eq!(SystemCall::WaitUntilMessageReceived.raw_value(), 1);
+        assert_eq!(SystemCall::SleepUntilMessageReceived.raw_value(), 1);
         assert_eq!(SystemCall::Sleep.raw_value(), 2);
     }
 
@@ -233,7 +205,7 @@ mod tests {
     fn parse_valid() {
         assert_eq!(SystemCall::Exit, SystemCall::try_from(0).unwrap());
         assert_eq!(
-            SystemCall::WaitUntilMessageReceived,
+            SystemCall::SleepUntilMessageReceived,
             SystemCall::try_from(1).unwrap()
         );
         assert_eq!(SystemCall::Sleep, SystemCall::try_from(2).unwrap());
