@@ -6,5 +6,6 @@
 librs::main!(main);
 
 fn main() {
+    librs::syscall::register_server(None);
     println!("Hello, world!");
 }
