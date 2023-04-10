@@ -1,22 +1,19 @@
-// TODO: remove
-#![allow(dead_code)]
-
-mod header;
-mod program;
-mod section;
-mod symbol;
-
-use crate::memory;
+use crate::memory::{self, page};
 use alloc::boxed::Box;
 use binrw::BinRead;
+use fairy::{
+    header,
+    program::{self, ProgramFlags},
+};
 
-// Resources:
-// https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
-// https://upload.wikimedia.org/wikipedia/commons/e/e4/ELF_Executable_and_Linkable_Format_diagram_by_Ange_Albertini.png
-// https://man7.org/linux/man-pages/man5/elf.5.html
-// https://docs.oracle.com/cd/E23824_01/html/819-0690/chapter6-46512.html#scrolltoc
-// https://wiki.osdev.org/ELF_Tutorialhttps://wiki.osdev.org/ELF_Tutorial
-// $ cargo readobj -- --headers
+const fn convert_flags(from: ProgramFlags) -> Option<page::EntryAttributes> {
+    match (from.read(), from.write(), from.execute()) {
+        (true, false, false) => Some(page::EntryAttributes::UserRead),
+        (true, false, true) => Some(page::EntryAttributes::UserReadExecute),
+        (true, true, false) => Some(page::EntryAttributes::UserReadWrite),
+        _ => None,
+    }
+}
 
 pub fn load_elf(elf: &[u8], page_table: &mut memory::page::Table) -> u64 {
     let mut cursor = binrw::io::Cursor::new(elf);
@@ -50,7 +47,7 @@ pub fn load_elf(elf: &[u8], page_table: &mut memory::page::Table) -> u64 {
                 page_table.map_page(
                     vaddr,
                     Box::into_raw(page_data) as usize,
-                    program.flags.as_page_attributes(),
+                    convert_flags(program.flags).unwrap(),
                 );
             }
         }

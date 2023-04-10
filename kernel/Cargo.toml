@@ -16,3 +16,6 @@ path = "../libs/syscall"
 
 [dependencies.uart]
 path = "../libs/uart"
+
+[dependencies.fairy]
+path = "../libs/fairy"

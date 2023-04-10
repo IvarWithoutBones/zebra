@@ -1,4 +1,3 @@
-use crate::memory::page;
 use binrw::{binrw, io::SeekFrom, BinRead, BinResult};
 use bitbybit::bitfield;
 use core::{fmt, mem::size_of, ops::RangeInclusive};
@@ -74,17 +73,6 @@ impl fmt::Debug for ProgramFlags {
             .field("write", &self.write())
             .field("read", &self.read())
             .finish()
-    }
-}
-
-impl ProgramFlags {
-    pub fn as_page_attributes(&self) -> page::EntryAttributes {
-        match (self.read(), self.write(), self.execute()) {
-            (true, false, false) => page::EntryAttributes::UserRead,
-            (true, false, true) => page::EntryAttributes::UserReadExecute,
-            (true, true, false) => page::EntryAttributes::UserReadWrite,
-            _ => unimplemented!("program flags combination: {self:?}"),
-        }
     }
 }
 

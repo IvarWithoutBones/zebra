@@ -3,8 +3,6 @@ use alloc::vec::Vec;
 use binrw::{binrw, io::Cursor, BinRead, BinResult, Endian};
 use core::ops::{Index, IndexMut};
 
-const SECTION_ABSOLUTE: u16 = 0xfff1;
-
 #[derive(Debug)]
 pub struct SymbolTable<'a> {
     symbols: Vec<Symbol<'a>>,

@@ -3,7 +3,10 @@ pub mod syscall;
 pub mod trapframe;
 
 use self::trapframe::TrapFrame;
-use crate::memory::{allocator, page, sections::map_trampoline, PAGE_SIZE};
+use crate::{
+    elf::load_elf,
+    memory::{allocator, page, sections::map_trampoline, PAGE_SIZE},
+};
 use alloc::boxed::Box;
 use core::{
     arch::global_asm,
@@ -14,7 +17,6 @@ use core::{
 
 const STACK_SIZE: usize = 40 * PAGE_SIZE;
 const TRAPFRAME_ADDR: usize = 0x1000;
-
 static NEXT_PID: AtomicUsize = AtomicUsize::new(1);
 
 global_asm!(include_str!("context_switch.s"), TRAPFRAME_ADDR = const TRAPFRAME_ADDR);
@@ -68,7 +70,7 @@ impl Process {
         map_trampoline(&mut page_table);
 
         // Map the users program
-        let entry = crate::fairy::load_elf(elf, &mut page_table);
+        let entry = load_elf(elf, &mut page_table);
 
         let mut trap_frame = TrapFrame::new(
             page_table.build_satp() as _,

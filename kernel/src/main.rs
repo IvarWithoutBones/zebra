@@ -6,7 +6,7 @@
 
 #[macro_use]
 mod language_items;
-mod fairy;
+mod elf;
 mod ipc;
 mod memory;
 mod power;
