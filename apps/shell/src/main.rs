@@ -13,6 +13,7 @@ use librs::syscall;
 const HELLO_ELF: &[u8] = include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/hello");
 const LOG_ELF: &[u8] =
     include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/log-server");
+const USTAR_ELF: &[u8] = include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/ustar");
 
 const SLEEP_DURATION: Duration = Duration::from_millis(20);
 
@@ -71,6 +72,7 @@ fn main() {
     // Until an `init` process exists
     syscall::spawn(LOG_ELF, false);
     syscall::sleep(SLEEP_DURATION); // Dont print before the log server is set up
+    syscall::spawn(USTAR_ELF, true);
 
     println!("welcome to knockoff bash");
     print_prefix();

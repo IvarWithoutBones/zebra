@@ -197,8 +197,8 @@ mod tests {
     #[test_case]
     fn raw_value() {
         assert_eq!(SystemCall::Exit.raw_value(), 0);
-        assert_eq!(SystemCall::SleepUntilMessageReceived.raw_value(), 1);
-        assert_eq!(SystemCall::Sleep.raw_value(), 2);
+        assert_eq!(SystemCall::SleepUntilMessageReceived.raw_value(), 2);
+        assert_eq!(SystemCall::Sleep.raw_value(), 1);
     }
 
     #[test_case]
@@ -206,9 +206,9 @@ mod tests {
         assert_eq!(SystemCall::Exit, SystemCall::try_from(0).unwrap());
         assert_eq!(
             SystemCall::SleepUntilMessageReceived,
-            SystemCall::try_from(1).unwrap()
+            SystemCall::try_from(2).unwrap()
         );
-        assert_eq!(SystemCall::Sleep, SystemCall::try_from(2).unwrap());
+        assert_eq!(SystemCall::Sleep, SystemCall::try_from(1).unwrap());
     }
 
     #[test_case]

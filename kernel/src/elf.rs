@@ -32,9 +32,12 @@ pub fn load_elf(elf: &[u8], page_table: &mut memory::page::Table) -> u64 {
             for page in 0..pages_needed {
                 // New page filled with the program data
                 let page_data = {
-                    let offset = program.offset as usize + (page * memory::PAGE_SIZE);
+                    let elf_start = program.offset as usize + (page * memory::PAGE_SIZE);
+                    let elf_end = (elf_start + len).min(elf.len());
+                    let dst_len = elf_end - elf_start;
+
                     let mut data = Box::new([0u8; memory::PAGE_SIZE]);
-                    data[..len].copy_from_slice(&elf[offset..offset + len]);
+                    data[..dst_len].copy_from_slice(&elf[elf_start..elf_end]);
                     data
                 };
 

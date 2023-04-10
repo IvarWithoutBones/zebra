@@ -21,6 +21,7 @@ pub unsafe fn attach_supervisor_trap_vector() {
     asm!("csrw stvec, {}", in(reg) supervisor_trap_vector as usize);
 }
 
+#[cfg(not(test))]
 pub unsafe fn enable_interrupts() {
     println!("enabling interrupts...");
 
