@@ -45,8 +45,16 @@ impl<'a> SectionTable<'a> {
         self.sections.iter().find(|s| s.name == name)
     }
 
-    fn get_mut(&mut self, name: &str) -> Option<&mut Section<'a>> {
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut Section<'a>> {
         self.sections.iter_mut().find(|s| s.name == name)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Section<'a>> {
+        self.sections.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Section<'a>> {
+        self.sections.iter_mut()
     }
 }
 

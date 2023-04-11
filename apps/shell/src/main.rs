@@ -10,10 +10,18 @@ use core::time::Duration;
 use librs::syscall;
 
 // Filesystems are bloatware
-const HELLO_ELF: &[u8] = include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/hello");
-const LOG_ELF: &[u8] =
-    include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/log-server");
-const USTAR_ELF: &[u8] = include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/ustar");
+mod elfs {
+    #![allow(dead_code)]
+
+    pub const HELLO: &[u8] =
+        include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/hello");
+    pub const LOG: &[u8] =
+        include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/log-server");
+    pub const USTAR: &[u8] =
+        include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/ustar");
+    pub const VIRTIO: &[u8] =
+        include_bytes!("../../../target/riscv64gc-unknown-none-elf/debug/virtio");
+}
 
 const SLEEP_DURATION: Duration = Duration::from_millis(20);
 
@@ -35,11 +43,11 @@ fn handle_command(line: &str) {
         }
 
         "hello" => {
-            syscall::spawn(HELLO_ELF, true);
+            syscall::spawn(elfs::HELLO, true);
         }
 
         "async_hello" => {
-            syscall::spawn(HELLO_ELF, false);
+            syscall::spawn(elfs::HELLO, false);
         }
 
         "sleep" => {
@@ -70,9 +78,11 @@ fn main() {
     syscall::register_server(None);
 
     // Until an `init` process exists
-    syscall::spawn(LOG_ELF, false);
+    syscall::spawn(elfs::LOG, false);
     syscall::sleep(SLEEP_DURATION); // Dont print before the log server is set up
-    syscall::spawn(USTAR_ELF, true);
+
+    // syscall::spawn(elfs::USTAR, true);
+    syscall::spawn(elfs::VIRTIO, true);
 
     println!("welcome to knockoff bash");
     print_prefix();

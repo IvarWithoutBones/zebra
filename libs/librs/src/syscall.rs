@@ -8,7 +8,8 @@ pub fn exit() -> ! {
     unsafe {
         asm!("ecall",
             in("a7") SystemCall::Exit as usize,
-            options(noreturn, nomem, nostack));
+            options(noreturn, nomem, nostack)
+        );
     }
 }
 
@@ -17,7 +18,8 @@ pub fn wait_until_message_received() {
     unsafe {
         asm!("ecall",
             in("a7") SystemCall::SleepUntilMessageReceived as usize,
-            options(nomem, nostack));
+            options(nomem, nostack)
+        );
     }
 }
 
@@ -30,7 +32,8 @@ pub fn allocate(size: usize) -> *mut u8 {
             in("a0") size,
             lateout("a0") result,
             in("a7") SystemCall::Allocate as usize,
-            options(nomem, nostack));
+            options(nomem, nostack)
+        );
     }
 
     result
@@ -45,7 +48,8 @@ pub unsafe fn deallocate(ptr: *mut u8) {
         asm!("ecall",
             in("a0") ptr,
             in("a7") SystemCall::Deallocate as usize,
-            options(nomem, nostack));
+            options(nomem, nostack)
+        );
     }
 }
 
@@ -57,7 +61,8 @@ pub fn spawn(elf: &[u8], blocking: bool) {
             in("a1") elf.len(),
             in("a2") blocking as u64,
             in("a7") SystemCall::Spawn as usize,
-            options(nomem, nostack));
+            options(nomem, nostack)
+        );
     }
 }
 
@@ -71,7 +76,8 @@ pub fn duration_since_boot() -> Duration {
             lateout("a0") secs,
             lateout("a1") subsec_nanos,
             in("a7") SystemCall::DurationSinceBootup as usize,
-            options(nomem, nostack));
+            options(nomem, nostack)
+        );
     }
 
     Duration::new(secs, subsec_nanos as _)
@@ -87,7 +93,8 @@ pub fn sleep(duration: Duration) {
             in("a0") secs,
             in("a1") subsec_nanos,
             in("a7") SystemCall::Sleep as usize,
-            options(nomem, nostack));
+            options(nomem, nostack)
+        );
     }
 }
 
@@ -101,7 +108,8 @@ pub fn identity_map(range: RangeInclusive<u64>) {
             in("a0") start,
             in("a1") end,
             in("a7") SystemCall::IdentityMap as usize,
-            options(nomem, nostack));
+            options(nomem, nostack)
+        );
     }
 }
 
@@ -117,7 +125,8 @@ pub fn send_message(server_id: u64, identifier: u64, data: MessageData) {
             in("a5") data[3],
             in("a6") data[4],
             in("a7") SystemCall::SendMessage as usize,
-            options(nomem, nostack));
+            options(nomem, nostack)
+        );
     }
 }
 
@@ -137,7 +146,8 @@ pub fn receive_message() -> Option<(u64, u64, MessageData)> {
             lateout("a5") data[3],
             lateout("a6") data[4],
             in("a7") SystemCall::ReceiveMessage as usize,
-            options(nomem, nostack));
+            options(nomem, nostack)
+        );
     }
 
     if identifier == u64::MAX {
@@ -157,7 +167,8 @@ pub fn register_server(public_name: Option<u64>) -> Option<u64> {
             in("a0") public_name,
             lateout("a0") server_id,
             in("a7") SystemCall::RegisterServer as usize,
-            options(nomem, nostack));
+            options(nomem, nostack)
+        );
     }
 
     if server_id == u64::MAX {

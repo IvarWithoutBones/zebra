@@ -6,6 +6,10 @@ use crate::{
 };
 use core::mem::size_of;
 
+// TODO: dont hardcode this into the kernel
+const VIRTIO_START: usize = 0x10001000;
+const VIRTIO_END: usize = 0x10008000;
+
 /// Generate a safe wrapper to access a linker section.
 macro_rules! section {
     ($fn_name: ident, $link_name: ident) => {
@@ -82,6 +86,10 @@ pub fn map_kernel(page_table: &mut page::Table) {
         clint::MTIME + size_of::<u64>(),
         page::EntryAttributes::ReadWrite,
     );
+
+    // TODO: We only need to map this into the kernel so that we can identity map it into userspace drivers.
+    // How do we avoid mapping it into the kernel at all, if we need to be able to resolve the physcial address?
+    page_table.identity_map(VIRTIO_START, VIRTIO_END, page::EntryAttributes::ReadWrite);
 
     page_table.map_page(
         uart::BASE_ADDR as _,

@@ -19,7 +19,7 @@ pub fn handle() -> Option<()> {
         match syscall {
             SystemCall::Exit => {
                 let pid = procs.remove_current().unwrap().pid;
-                println!("process {pid} gracefully exited");
+                println!("\nprocess {pid} gracefully exited");
             }
 
             SystemCall::Allocate => {
@@ -99,14 +99,19 @@ pub fn handle() -> Option<()> {
 
             // TODO: Capabilities, not every process should be allowed to do this.
             // TODO: Maybe it would make more sense to only allow this when spawing a new process?
+            // TODO: Ensure the passed range is page-aligned.
             SystemCall::IdentityMap => {
                 let start = proc.trap_frame.registers[Registers::A0 as usize] as usize;
                 let end = proc.trap_frame.registers[Registers::A1 as usize] as usize;
 
+                // TODO: Needs a spinlock.
                 let root_table = memory::page::root_table();
+
                 // TODO: this will not work if the given address is not already mapped by the kernel.
                 let physical_start = root_table.physical_addr(start).unwrap();
                 let physical_end = root_table.physical_addr(end).unwrap();
+
+                assert!(physical_start != 0 && physical_end != 0);
 
                 proc.page_table.identity_map(
                     physical_start,

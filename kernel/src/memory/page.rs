@@ -161,11 +161,11 @@ impl Table {
     }
 
     pub fn identity_map(&mut self, start: usize, end: usize, flags: EntryAttributes) {
-        let mut addr = align_page_down(start);
-        let num_kb_pages = (align_page_up(end) - addr) / PAGE_SIZE;
-        for _ in 0..num_kb_pages {
+        let start = align_page_down(start);
+        let pages_needed = align_page_up(end + 1).saturating_sub(start) / PAGE_SIZE;
+        for i in 0..pages_needed {
+            let addr = start + (i * PAGE_SIZE);
             self.map_addr(addr, addr, flags.clone(), 0);
-            addr += PAGE_SIZE;
         }
     }
 

@@ -1,0 +1,10 @@
+[package]
+name = "virtio"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bitbybit = "1.1.2"
+
+[dependencies.librs]
+path = "../../libs/librs"

@@ -51,6 +51,9 @@ check:
     cargo test --bin zebra-kernel
     @echo "tests passed"
 
+mktar:
+    tar --format=ustar -cf foo.tar ./libs
+
 # Run the kernel in QEMU
 run kernel_path=(kernel_image_path) *args="":
     qemu-system-riscv64 \
@@ -61,6 +64,8 @@ run kernel_path=(kernel_image_path) *args="":
         -m 128M \
         -nographic \
         -serial mon:stdio \
+        -drive file=./foo.tar,format=raw,if=none,id=x0 \
+        -device virtio-blk-device,drive=x0 \
         {{ qemu_extra_args }} \
         -kernel {{ kernel_path }}
 

@@ -158,6 +158,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "virtio"
+version = "0.1.0"
+dependencies = [
+ "bitbybit",
+ "librs",
+]
+
+[[package]]
 name = "zebra-kernel"
 version = "0.1.0"
 dependencies = [
