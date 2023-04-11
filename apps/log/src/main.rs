@@ -34,7 +34,7 @@ fn main() {
             }
 
             Request::Write { data } => {
-                data.to_be_bytes().iter().for_each(|b| UART.write_byte(*b));
+                data.to_be_bytes().iter().for_each(|b| UART.write(*b));
             }
 
             Request::Unknown { id } => {
