@@ -2,14 +2,14 @@
 #![test_runner(librs::test::test_runner)]
 #![no_std]
 
-use librs::ipc;
+use librs::ipc::{self, MessageData};
 
 const SERVER_ID: u64 = u64::from_ne_bytes(*b"log\0\0\0\0\0");
 
 #[derive(Debug, Clone, Copy)]
 pub enum Request {
     Read,
-    Write { data: u64 },
+    Write { data: MessageData },
     Unknown { id: u64 },
 }
 
@@ -39,7 +39,7 @@ impl From<ipc::Message> for Request {
 #[derive(Debug, Clone, Copy)]
 pub enum Reply {
     DataNotReady,
-    DataReady { data: u8 },
+    DataReady { data: MessageData },
     RequestUnknown,
 }
 
@@ -47,9 +47,7 @@ impl From<ipc::Message> for Reply {
     fn from(msg: ipc::Message) -> Reply {
         match msg.identifier {
             0 => Reply::DataNotReady,
-            1 => Reply::DataReady {
-                data: msg.data as u8,
-            },
+            1 => Reply::DataReady { data: msg.data },
             _ => Reply::RequestUnknown,
         }
     }
@@ -69,7 +67,8 @@ pub fn read() -> Option<u8> {
     if let Some(msg) = Request::Read.to_message().send_receive() {
         let reply = Reply::from(msg);
         match reply {
-            Reply::DataReady { data } => Some(data),
+            // TODO: reply with more data if available
+            Reply::DataReady { data } => Some(data[0] as _),
             _ => None,
         }
     } else {
@@ -77,6 +76,6 @@ pub fn read() -> Option<u8> {
     }
 }
 
-pub fn write(data: u64) {
+pub fn write(data: MessageData) {
     Request::Write { data }.to_message().send();
 }

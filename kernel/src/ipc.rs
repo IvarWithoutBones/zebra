@@ -5,16 +5,42 @@ use core::sync::atomic::{AtomicU64, Ordering};
 static SERVER_LIST: Spinlock<ServerList> = Spinlock::new(ServerList::new());
 static NEXT_SERVER_ID: AtomicU64 = AtomicU64::new(1);
 
+// TODO: merge with librs
+#[derive(Debug, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct MessageData {
+    pub data: [u64; 5],
+}
+
+impl MessageData {
+    const DEFAULT: MessageData = MessageData { data: [0; 5] };
+
+    pub fn from_slice(data: &[u64]) -> Self {
+        let mut result = Self::DEFAULT;
+        result.data[..data.len()].copy_from_slice(data);
+        result
+    }
+
+    pub fn as_slice(&self) -> &[u64] {
+        &self.data
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Message {
     pub identifier: u64,
-    pub data: u64,
     pub sender_pid: usize,
     pub sender_sid: u64,
+    pub data: MessageData,
 }
 
 impl Message {
-    pub const fn new(sender_pid: usize, sender_sid: u64, identifier: u64, data: u64) -> Self {
+    pub const fn new(
+        sender_pid: usize,
+        sender_sid: u64,
+        identifier: u64,
+        data: MessageData,
+    ) -> Self {
         Self {
             sender_sid,
             sender_pid,

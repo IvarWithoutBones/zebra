@@ -1,4 +1,4 @@
-use crate::ipc;
+use crate::ipc::{self, MessageData};
 use core::{
     fmt::{self, Write},
     mem::size_of,
@@ -8,14 +8,15 @@ pub struct StandardOutput;
 
 impl Write for StandardOutput {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        s.as_bytes().chunks(size_of::<u64>()).for_each(|chunk| {
-            let mut buf = [0; size_of::<u64>()];
-            buf[..chunk.len()].copy_from_slice(chunk);
-            ipc::MessageBuilder::new(u64::from_le_bytes(*b"log\0\0\0\0\0"))
-                .with_identifier(1) // ID_WRITE
-                .with_data(u64::from_be_bytes(buf))
-                .send();
-        });
+        s.as_bytes()
+            .chunks(size_of::<MessageData>())
+            .for_each(|bytes| {
+                ipc::MessageBuilder::new(u64::from_le_bytes(*b"log\0\0\0\0\0"))
+                    .with_identifier(1) // ID_WRITE
+                    .with_data(bytes.into())
+                    .send();
+            });
+
         Ok(())
     }
 }

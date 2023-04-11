@@ -3,7 +3,10 @@
 #![no_std]
 #![no_main]
 
-use librs::{ipc, syscall};
+use librs::{
+    ipc::{self, MessageData},
+    syscall,
+};
 use log_server::{Reply, Request};
 
 librs::main!(main);
@@ -22,9 +25,12 @@ fn main() {
         match Request::from(msg) {
             Request::Read => {
                 if let Some(b) = UART.poll() {
+                    // TODO: reply with more data if available
+                    let data = MessageData::from(b as u64);
+
                     reply
-                        .with_identifier(Reply::DataReady { data: b }.to_identifier())
-                        .with_data(b as u64)
+                        .with_identifier(Reply::DataReady { data }.to_identifier())
+                        .with_data(data)
                         .send();
                 } else {
                     reply
@@ -34,13 +40,14 @@ fn main() {
             }
 
             Request::Write { data } => {
-                data.to_be_bytes().iter().for_each(|b| UART.write(*b));
+                data.iter()
+                    .for_each(|num| num.to_be_bytes().iter().for_each(|b| UART.write(*b)));
             }
 
             Request::Unknown { id } => {
                 reply
                     .with_identifier(Reply::RequestUnknown.to_identifier())
-                    .with_data(id)
+                    .with_data(id.into())
                     .send();
             }
         }

@@ -1,17 +1,23 @@
 use core::{arch::asm, ops::RangeInclusive, time::Duration};
 use syscall::SystemCall;
 
+use crate::ipc::MessageData;
+
 /// Exit the current process.
 pub fn exit() -> ! {
     unsafe {
-        asm!("ecall", in("a7") SystemCall::Exit as usize, options(noreturn, nomem, nostack));
+        asm!("ecall",
+            in("a7") SystemCall::Exit as usize,
+            options(noreturn, nomem, nostack));
     }
 }
 
 /// Sleep until an IPC message is received, useful for implementing servers.
 pub fn wait_until_message_received() {
     unsafe {
-        asm!("ecall", in("a7") SystemCall::SleepUntilMessageReceived as usize, options(nomem, nostack));
+        asm!("ecall",
+            in("a7") SystemCall::SleepUntilMessageReceived as usize,
+            options(nomem, nostack));
     }
 }
 
@@ -20,7 +26,11 @@ pub fn allocate(size: usize) -> *mut u8 {
     let result: *mut u8;
 
     unsafe {
-        asm!("ecall", in("a7") SystemCall::Allocate as usize, in("a0") size, lateout("a0") result, options(nomem, nostack));
+        asm!("ecall",
+            in("a0") size,
+            lateout("a0") result,
+            in("a7") SystemCall::Allocate as usize,
+            options(nomem, nostack));
     }
 
     result
@@ -32,14 +42,22 @@ pub fn allocate(size: usize) -> *mut u8 {
 /// The callee must ensure that the pointer is valid.
 pub unsafe fn deallocate(ptr: *mut u8) {
     unsafe {
-        asm!("ecall", in("a7") SystemCall::Deallocate as usize, in("a0") ptr, options(nomem, nostack));
+        asm!("ecall",
+            in("a0") ptr,
+            in("a7") SystemCall::Deallocate as usize,
+            options(nomem, nostack));
     }
 }
 
 /// Spawn a new process from an ELF file. If `blocking` is `true`, the current process will block until the new process exits.
 pub fn spawn(elf: &[u8], blocking: bool) {
     unsafe {
-        asm!("ecall", in("a7") SystemCall::Spawn as usize, in("a0") elf.as_ptr(), in("a1") elf.len(), in("a2") blocking as u64, options(nomem, nostack));
+        asm!("ecall",
+            in("a0") elf.as_ptr(),
+            in("a1") elf.len(),
+            in("a2") blocking as u64,
+            in("a7") SystemCall::Spawn as usize,
+            options(nomem, nostack));
     }
 }
 
@@ -49,7 +67,11 @@ pub fn duration_since_boot() -> Duration {
     let subsec_nanos: u64;
 
     unsafe {
-        asm!("ecall", in("a7") SystemCall::DurationSinceBootup as usize, lateout("a0") secs, lateout("a1") subsec_nanos, options(nomem, nostack));
+        asm!("ecall",
+            lateout("a0") secs,
+            lateout("a1") subsec_nanos,
+            in("a7") SystemCall::DurationSinceBootup as usize,
+            options(nomem, nostack));
     }
 
     Duration::new(secs, subsec_nanos as _)
@@ -59,8 +81,13 @@ pub fn duration_since_boot() -> Duration {
 pub fn sleep(duration: Duration) {
     let secs = duration.as_secs();
     let subsec_nanos = duration.subsec_nanos();
+
     unsafe {
-        asm!("ecall", in("a7") SystemCall::Sleep as usize, in("a0") secs, in("a1") subsec_nanos, options(nomem, nostack));
+        asm!("ecall",
+            in("a0") secs,
+            in("a1") subsec_nanos,
+            in("a7") SystemCall::Sleep as usize,
+            options(nomem, nostack));
     }
 }
 
@@ -70,31 +97,53 @@ pub fn identity_map(range: RangeInclusive<u64>) {
     let end = *range.end();
 
     unsafe {
-        asm!("ecall", in("a7") SystemCall::IdentityMap as usize, in("a0") start, in("a1") end, options(nomem, nostack));
+        asm!("ecall",
+            in("a0") start,
+            in("a1") end,
+            in("a7") SystemCall::IdentityMap as usize,
+            options(nomem, nostack));
     }
 }
 
 /// Send a message to the server with the given ID.
-pub fn send_message(server_id: u64, identifier: u64, data: u64) {
+pub fn send_message(server_id: u64, identifier: u64, data: MessageData) {
     unsafe {
-        asm!("ecall", in("a7") SystemCall::SendMessage as usize, in("a0") server_id, in("a1") identifier, in("a2") data, options(nomem, nostack));
+        asm!("ecall",
+            in("a0") server_id,
+            in("a1") identifier,
+            in("a2") data[0],
+            in("a3") data[1],
+            in("a4") data[2],
+            in("a5") data[3],
+            in("a6") data[4],
+            in("a7") SystemCall::SendMessage as usize,
+            options(nomem, nostack));
     }
 }
 
 /// Receive a message from a client, returning the identifier and data.
-pub fn receive_message() -> Option<(u64, u64, u64)> {
+pub fn receive_message() -> Option<(u64, u64, MessageData)> {
     let identifier: u64;
-    let data: u64;
     let sender_sid: u64;
+    let mut data = [0; 5];
 
     unsafe {
-        asm!("ecall", in("a7") SystemCall::ReceiveMessage as usize, lateout("a0") identifier, lateout("a1") data, lateout("a2") sender_sid, options(nomem, nostack));
+        asm!("ecall",
+            lateout("a0") identifier,
+            lateout("a1") sender_sid,
+            lateout("a2") data[0],
+            lateout("a3") data[1],
+            lateout("a4") data[2],
+            lateout("a5") data[3],
+            lateout("a6") data[4],
+            in("a7") SystemCall::ReceiveMessage as usize,
+            options(nomem, nostack));
     }
 
     if identifier == u64::MAX {
         None
     } else {
-        Some((identifier, data, sender_sid))
+        Some((identifier, sender_sid, data.into()))
     }
 }
 
@@ -104,7 +153,11 @@ pub fn register_server(public_name: Option<u64>) -> Option<u64> {
     let server_id: u64;
 
     unsafe {
-        asm!("ecall", in("a7") SystemCall::RegisterServer as usize, in("a0") public_name, lateout("a0") server_id, options(nomem, nostack));
+        asm!("ecall",
+            in("a0") public_name,
+            lateout("a0") server_id,
+            in("a7") SystemCall::RegisterServer as usize,
+            options(nomem, nostack));
     }
 
     if server_id == u64::MAX {

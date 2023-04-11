@@ -1,6 +1,6 @@
 use super::{scheduler, trapframe::Registers, Process, ProcessState};
 use crate::{
-    ipc::{self, Message},
+    ipc::{self, Message, MessageData},
     memory,
     trap::clint,
 };
@@ -122,7 +122,9 @@ pub fn handle() -> Option<()> {
             SystemCall::SendMessage => {
                 let server_id = proc.trap_frame.registers[Registers::A0 as usize];
                 let identifier = proc.trap_frame.registers[Registers::A1 as usize];
-                let data = proc.trap_frame.registers[Registers::A2 as usize];
+                let data = MessageData::from_slice(
+                    &proc.trap_frame.registers[Registers::A2 as usize..=Registers::A6 as usize],
+                );
 
                 let mut server_list = ipc::server_list().lock();
                 let curr_sid = if let Some(server) = server_list.get_by_pid(proc.pid) {
@@ -153,8 +155,9 @@ pub fn handle() -> Option<()> {
 
                 if let Some(msg) = server.receive_message() {
                     proc.trap_frame.registers[Registers::A0 as usize] = msg.identifier;
-                    proc.trap_frame.registers[Registers::A1 as usize] = msg.data;
-                    proc.trap_frame.registers[Registers::A2 as usize] = msg.sender_sid;
+                    proc.trap_frame.registers[Registers::A1 as usize] = msg.sender_sid;
+                    proc.trap_frame.registers[Registers::A2 as usize..=Registers::A6 as usize]
+                        .copy_from_slice(msg.data.as_slice());
 
                     let mut sender = procs.find_by_pid(msg.sender_pid)?;
                     if let ProcessState::MessageSent { receiver_sid } = sender.state {
