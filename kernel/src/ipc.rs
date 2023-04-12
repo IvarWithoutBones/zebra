@@ -1,8 +1,8 @@
-use crate::spinlock::Spinlock;
+use crate::spinlock::SpinLock;
 use alloc::{collections::VecDeque, vec::Vec};
 use core::sync::atomic::{AtomicU64, Ordering};
 
-static SERVER_LIST: Spinlock<ServerList> = Spinlock::new(ServerList::new());
+static SERVER_LIST: SpinLock<ServerList> = SpinLock::new(ServerList::new());
 static NEXT_SERVER_ID: AtomicU64 = AtomicU64::new(1);
 
 // TODO: merge with librs
@@ -129,6 +129,6 @@ impl ServerList {
     }
 }
 
-pub fn server_list() -> &'static Spinlock<ServerList> {
+pub fn server_list() -> &'static SpinLock<ServerList> {
     &SERVER_LIST
 }

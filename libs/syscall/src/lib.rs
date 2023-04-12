@@ -24,6 +24,8 @@ pub enum SystemCall {
     SendMessage = 4,
     ReceiveMessage = 5,
     RegisterServer = 6,
+    RegisterInterruptHandler = 11,
+    CompleteInterrupt = 12,
 
     // TODO: Remove these
     Spawn = 7,

@@ -1,20 +1,18 @@
 pub mod clint;
 pub mod plic;
 
-use {
-    crate::{memory::page, process, uart},
-    core::{
-        arch::{asm, global_asm},
-        fmt::Debug,
-    },
+use crate::{memory::page, process};
+use core::{
+    arch::{asm, global_asm},
+    fmt::Debug,
 };
 
-global_asm!(include_str!("./vector.s"));
-
 extern "C" {
-    // Trap vector defined in `vector.s`
+    // Defined in `vector.s`
     fn supervisor_trap_vector();
 }
+
+global_asm!(include_str!("./vector.s"));
 
 pub unsafe fn attach_supervisor_trap_vector() {
     // Set the supervisor trap vector defined in `vector.s`, which will execute the Rust handler below
@@ -56,15 +54,7 @@ impl Interrupt {
     fn handle(&self) {
         match self {
             Self::SupervisorExternal => {
-                if let Some(intr) = plic::claim() {
-                    // TODO: factor this in a nicer way using InterruptDevice
-                    match intr as usize {
-                        uart::IRQ_ID => uart::interrupt(),
-                        _ => panic!("unhandled external interrupt: {intr}"),
-                    }
-
-                    plic::complete(intr);
-                }
+                plic::handle_interrupt()
             }
 
             Self::SupervisorSoftware => {
@@ -188,8 +178,8 @@ impl From<usize> for Trap {
 #[no_mangle]
 extern "C" fn user_trap_handler(cause: usize) {
     let trap = Trap::from(cause);
-    if let Trap::Interrupt(trap) = trap {
-        trap.handle();
+    if let Trap::Interrupt(intr) = trap {
+        intr.handle();
     } else if trap == Trap::Exception(Exception::UserEnvironmentCall) {
         process::syscall::handle();
     } else {
@@ -200,10 +190,16 @@ extern "C" fn user_trap_handler(cause: usize) {
                 value
             };
 
+            let sepc = unsafe {
+                let value: usize;
+                asm!("csrr {}, sepc", lateout(reg) value);
+                value
+            };
+
             let offender = procs.remove_current().unwrap();
             let pid = offender.pid;
             let trap_frame = offender.trap_frame;
-            println!("killed process {pid} because of an unhandled trap: {trap:?} at {stval:#x}:\n{trap_frame}");
+            println!("killed process {pid} because of an unhandled trap: {trap:?}. stval = {stval:#x}, sepc = {sepc:#x}:\n{trap_frame}");
         })
     }
 

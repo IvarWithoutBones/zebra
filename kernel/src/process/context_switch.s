@@ -99,6 +99,14 @@ user_enter:
     ld t0, 32(a0)
     csrw sepc, t0
 
+    # Enable interrupts (still globally disabled at this point)
+    li t0, 1 << 9 | 1 << 5 | 1 << 1
+    csrw sie, t0
+
+    # Set the Previous Privilege Mode to User
+    li t0, 1 << 8
+    csrc sstatus, t0
+
     # Load the users registers
     ld sp, 40(a0)
     ld ra, 48(a0)
@@ -131,14 +139,6 @@ user_enter:
     ld s9, 264(a0)
 
     ld a0, 72(a0) # Finally load the users a0
-
-    # Set the Previous Privilege Mode to User
-    csrc sstatus, 8 << 1
-
-    # Enable interrupts
-    csrs sie, 9 << 1
-    csrs sie, 5 << 1
-    csrs sie, 1 << 1
 
     # Begin executing in user mode
     sret

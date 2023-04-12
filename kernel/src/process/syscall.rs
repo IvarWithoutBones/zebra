@@ -2,7 +2,7 @@ use super::{scheduler, trapframe::Registers, Process, ProcessState};
 use crate::{
     ipc::{self, Message, MessageData},
     memory,
-    trap::clint,
+    trap::{clint, plic},
 };
 use core::time::Duration;
 use syscall::SystemCall;
@@ -105,6 +105,14 @@ pub fn handle() {
                 let start = proc.trap_frame.registers[Registers::A0 as usize] as usize;
                 let end = proc.trap_frame.registers[Registers::A1 as usize] as usize;
 
+                if !memory::is_page_aligned(start) || !memory::is_page_aligned(end) {
+                    let pid = procs.remove_current().unwrap().pid;
+                    println!(
+                        "process {pid} tried to identity map an unaligned address. Killing process"
+                    );
+                    return;
+                }
+
                 let root_table = memory::page::root_table();
 
                 // TODO: this will not work if the given address is not already mapped by the kernel.
@@ -121,7 +129,7 @@ pub fn handle() {
             }
 
             SystemCall::SleepUntilMessageReceived => {
-                proc.state = ProcessState::MessageReceived;
+                proc.state = ProcessState::WaitUntilMessageReceived;
             }
 
             SystemCall::SendMessage => {
@@ -147,7 +155,11 @@ pub fn handle() {
                         receiver_sid: server.server_id,
                     };
 
-                    procs.find_by_pid(server.process_id).unwrap().state = ProcessState::Ready;
+                    if let Some(proc) = procs.find_by_pid(server.process_id) {
+                        if proc.state == ProcessState::WaitUntilMessageReceived {
+                            proc.state = ProcessState::Ready;
+                        }
+                    }
                 } else {
                     let pid = procs.remove_current().unwrap().pid;
                     println!("process {pid} tried to send a message to a non-existent server {server_id}. Killing process");
@@ -187,6 +199,28 @@ pub fn handle() {
                 };
 
                 proc.trap_frame.registers[Registers::A0 as usize] = server_id.unwrap_or(u64::MAX);
+            }
+
+            SystemCall::RegisterInterruptHandler => {
+                let interrupt = proc.trap_frame.registers[Registers::A0 as usize];
+                let handler = proc.trap_frame.registers[Registers::A1 as usize];
+                plic::add_user(interrupt as _, proc.pid, handler as _);
+            }
+
+            SystemCall::CompleteInterrupt => {
+                if let ProcessState::HandlingInterrupt {
+                    old_registers,
+                    old_state,
+                    interrupt_id,
+                } = proc.state.clone()
+                {
+                    proc.trap_frame.registers = *old_registers;
+                    proc.state = *old_state;
+                    plic::complete(interrupt_id);
+                } else {
+                    let pid = procs.remove_current().unwrap().pid;
+                    println!("process {pid} tried to complete an interrupt without being in an interrupt handler. Killing process");
+                }
             }
         }
     } else {

@@ -17,12 +17,12 @@ mod uart;
 
 extern crate alloc;
 
-use {arbitrary_int::u3, core::arch::global_asm};
+use core::arch::global_asm;
+
+global_asm!(include_str!("./asm/entry.s"));
 
 // Until a filesystem is implemented this is good enough for me :^)
 const SHELL_ELF: &[u8] = include_bytes!("../../target/riscv64gc-unknown-none-elf/debug/shell");
-
-global_asm!(include_str!("./asm/entry.s"));
 
 #[no_mangle]
 extern "C" fn kernel_main() {
@@ -31,8 +31,8 @@ extern "C" fn kernel_main() {
     unsafe {
         trap::attach_supervisor_trap_vector();
         memory::init();
-        trap::plic::set_global_threshold(u3::new(0));
-        trap::plic::add_device::<uart::NS16550a>();
+        trap::plic::set_global_threshold(0);
+        // trap::plic::add_device(&uart::UART);
 
         // No needs for interrupts in non-integration tests
         #[cfg(not(test))]

@@ -1,6 +1,7 @@
 pub mod scheduler;
 pub mod syscall;
 pub mod trapframe;
+pub mod interrupt;
 
 use self::trapframe::TrapFrame;
 use crate::{
@@ -26,17 +27,33 @@ static NEXT_PID: AtomicUsize = AtomicUsize::new(1);
 
 global_asm!(include_str!("context_switch.s"), TRAPFRAME_ADDR = const TRAPFRAME_ADDR);
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 enum ProcessState {
     Running,
     Ready,
-    Sleeping { duration: Duration },
-    ChildExited { child_pid: usize },
-    MessageSent { receiver_sid: u64 },
-    MessageReceived,
+    WaitUntilMessageReceived,
+
+    Sleeping {
+        duration: Duration,
+    },
+
+    ChildExited {
+        child_pid: usize,
+    },
+
+    MessageSent {
+        receiver_sid: u64,
+    },
+
+    HandlingInterrupt {
+        old_state: Box<ProcessState>,
+        old_registers: Box<[u64; trapframe::Registers::len()]>,
+        interrupt_id: u32,
+    },
 }
 
 #[repr(C)]
+#[derive(Clone)]
 pub struct Process {
     state: ProcessState,
     pub pid: usize,
@@ -45,18 +62,9 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn new(elf: &[u8]) -> Self {
-        let mut page_table = Box::new(page::Table::new());
-        // TODO: both stacks desperately need a guard page beneath to catch stack overflows
-        let user_stack = { allocator().allocate(STACK_SIZE).unwrap() }; // For the user itself.
-        let kernel_stack = { allocator().allocate(STACK_SIZE).unwrap() }; // For trapping into the kernel
-
-        // Map the initialisation code so that we can enter user mode after switching to the new page table
-        page_table.identity_map(
-            user_enter as usize,
-            user_enter as usize + PAGE_SIZE, // TODO: how do know the size of this?
-            page::EntryAttributes::ReadExecute,
-        );
+    pub fn map_user_stack(page_table: &mut page::Table) -> *mut u8 {
+        // TODO: guard page
+        let user_stack = { allocator().allocate(STACK_SIZE).unwrap() };
 
         // Map the users stack
         for page in 0..STACK_SIZE {
@@ -67,16 +75,30 @@ impl Process {
             );
         }
 
+        unsafe { user_stack.add(STACK_SIZE) }
+    }
+
+    pub fn new(elf: &[u8]) -> Self {
+        let mut page_table = Box::new(page::Table::new());
+        // TODO: both stacks desperately need a guard page beneath to catch stack overflows
+        let kernel_stack = { allocator().allocate(STACK_SIZE).unwrap() }; // For trapping into the kernel
+        let user_stack = Self::map_user_stack(&mut page_table);
+
+        // Map the initialisation code so that we can enter user mode after switching to the new page table
+        page_table.identity_map(
+            user_enter as usize,
+            user_enter as usize + PAGE_SIZE, // TODO: how do know the size of this?
+            page::EntryAttributes::ReadExecute,
+        );
+
         map_trampoline(&mut page_table);
 
         // Map the users program
         let entry = load_elf(elf, &mut page_table);
 
-        let mut trap_frame = TrapFrame::new(
-            page_table.build_satp() as _,
-            unsafe { user_stack.add(STACK_SIZE) } as _,
-            unsafe { kernel_stack.add(STACK_SIZE) } as _,
-        );
+        let mut trap_frame = TrapFrame::new(page_table.build_satp() as _, user_stack, unsafe {
+            kernel_stack.add(STACK_SIZE) // TODO: make this more consistent with the users stack
+        });
 
         trap_frame.registers[trapframe::Registers::ProgramCounter as usize] = entry;
 

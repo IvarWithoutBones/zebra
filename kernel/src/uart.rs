@@ -1,41 +1,41 @@
-use crate::{power, spinlock::Spinlock, trap::plic::InterruptDevice};
-use arbitrary_int::{u10, u3};
+use crate::{power, spinlock::SpinLock, trap::plic::InterruptDevice};
 use core::fmt::Write;
 
 // Re-export the uart module from the crate shared with userland.
 pub use uart::{NS16550a, BASE_ADDR};
 
-pub const IRQ_ID: usize = 10;
-pub static UART: Spinlock<uart::NS16550a> = Spinlock::new(NS16550a::DEFAULT);
+pub static UART: SpinLock<uart::NS16550a> = SpinLock::new(NS16550a::DEFAULT);
 
-impl InterruptDevice for uart::NS16550a {
-    const INTERRUPT_ID: u10 = u10::new(10);
-
-    fn priority() -> u3 {
-        arbitrary_int::u3::new(1)
+impl InterruptDevice for SpinLock<uart::NS16550a> {
+    fn identifier(&self) -> u16 {
+        10
     }
-}
 
-pub fn interrupt() {
-    // TODO: blocking here is unfortunate, this should be moved to a queue instead.
-    UART.lock_with(|uart| {
-        while let Some(byte) = uart.poll() {
-            let c = byte as char;
-            writeln!(uart, "got char: '{c}' ({byte:#02x})").unwrap();
+    fn priority(&self) -> u8 {
+        1
+    }
 
-            match c {
-                'q' => {
-                    writeln!(uart, "shutting down").unwrap();
-                    power::shutdown(power::ExitType::Success);
+    fn handle() {
+        // TODO: blocking here is unfortunate, this should be moved to a queue instead.
+        UART.lock_with(|uart| {
+            while let Some(byte) = uart.poll() {
+                let c = byte as char;
+                writeln!(uart, "got char: '{c}' ({byte:#02x})").unwrap();
+
+                match c {
+                    'q' => {
+                        writeln!(uart, "shutting down").unwrap();
+                        power::shutdown(power::ExitType::Success);
+                    }
+
+                    'r' => {
+                        writeln!(uart, "rebooting").unwrap();
+                        power::shutdown(power::ExitType::Reboot);
+                    }
+
+                    _ => {}
                 }
-
-                'r' => {
-                    writeln!(uart, "rebooting").unwrap();
-                    power::shutdown(power::ExitType::Reboot);
-                }
-
-                _ => {}
             }
-        }
-    });
+        });
+    }
 }

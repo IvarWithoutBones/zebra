@@ -45,12 +45,12 @@ pub enum Registers {
 
 impl Registers {
     pub const fn len() -> usize {
-        30
+        31
     }
 }
 
 #[repr(C)]
-#[derive(Default)]
+#[derive(Default, PartialEq, Eq, Clone)]
 pub struct TrapFrame {
     // Kernel state
     kernel_satp: u64,
@@ -61,13 +61,13 @@ pub struct TrapFrame {
 }
 
 impl TrapFrame {
-    pub fn new(user_satp: u64, stack_pointer: u64, kernel_stack_pointer: u64) -> Box<Self> {
+    pub fn new(user_satp: u64, stack_pointer: *mut u8, kernel_stack_pointer: *mut u8) -> Box<Self> {
         let mut registers = [0; Registers::len()];
         registers[Registers::Satp as usize] = user_satp;
-        registers[Registers::StackPointer as usize] = stack_pointer;
+        registers[Registers::StackPointer as usize] = stack_pointer as _;
 
         Box::new(Self {
-            kernel_stack_pointer,
+            kernel_stack_pointer: kernel_stack_pointer as _,
             registers,
             ..Default::default()
         })
@@ -99,7 +99,7 @@ impl fmt::Display for TrapFrame {
         writeln!(f, "TrapFrame {{")?;
         for (i, data) in self.registers.iter().enumerate() {
             let reg = Registers::new_with_raw_value(i as u64).unwrap();
-            writeln!(f, "    {:?}: {:#X}", reg, data)?;
+            writeln!(f, "    {:?}: {:#x}", reg, data)?;
         }
         writeln!(f, "}}")?;
 

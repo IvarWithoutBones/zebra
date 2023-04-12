@@ -1,6 +1,6 @@
 use {
     super::{align_page_up, sections, PAGE_SIZE, TOTAL_PAGES},
-    crate::spinlock::Spinlock,
+    crate::spinlock::SpinLock,
     core::{
         alloc::{GlobalAlloc, Layout},
         ptr,
@@ -8,9 +8,9 @@ use {
 };
 
 #[global_allocator]
-pub static ALLOCATOR: Spinlock<Allocator> = Spinlock::new(Allocator::new());
+pub static ALLOCATOR: SpinLock<Allocator> = SpinLock::new(Allocator::new());
 
-unsafe impl GlobalAlloc for Spinlock<Allocator> {
+unsafe impl GlobalAlloc for SpinLock<Allocator> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         self.lock()
             .allocate(layout.size())

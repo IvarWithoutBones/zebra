@@ -1,12 +1,12 @@
 use super::{align_page_down, align_page_up, PAGE_SIZE};
-use crate::spinlock::{Spinlock, SpinlockGuard};
+use crate::spinlock::{SpinLock, SpinLockGuard};
 use alloc::boxed::Box;
 use core::{arch::asm, mem::size_of, ptr::read_volatile};
 
-pub static KERNEL_PAGE_TABLE: Spinlock<Table> = Spinlock::new(Table::new());
+pub static KERNEL_PAGE_TABLE: SpinLock<Table> = SpinLock::new(Table::new());
 const TABLE_LEN: usize = PAGE_SIZE / size_of::<Entry>();
 
-pub fn root_table() -> SpinlockGuard<'static, Table> {
+pub fn root_table() -> SpinLockGuard<'static, Table> {
     KERNEL_PAGE_TABLE.lock()
 }
 
@@ -110,7 +110,7 @@ impl VirtualPageNumber {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C, align(4096))]
 pub struct Table {
     pub entries: [Entry; TABLE_LEN],

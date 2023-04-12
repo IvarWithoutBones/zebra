@@ -177,3 +177,23 @@ pub fn register_server(public_name: Option<u64>) -> Option<u64> {
         Some(server_id)
     }
 }
+
+pub fn register_interrupt_handler(interrupt: u64, handler: extern "C" fn()) {
+    unsafe {
+        asm!("ecall",
+            in("a0") interrupt,
+            in("a1") handler as usize,
+            in("a7") SystemCall::RegisterInterruptHandler as usize,
+            options(nomem, nostack)
+        );
+    }
+}
+
+pub fn complete_interrupt() {
+    unsafe {
+        asm!("ecall",
+            in("a7") SystemCall::CompleteInterrupt as usize,
+            options(nomem, nostack)
+        );
+    }
+}

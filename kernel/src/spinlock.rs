@@ -7,15 +7,15 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-pub struct Spinlock<T> {
+pub struct SpinLock<T> {
     locked: AtomicBool,
     data: UnsafeCell<T>,
 }
 
-unsafe impl<T> Send for Spinlock<T> {}
-unsafe impl<T> Sync for Spinlock<T> {}
+unsafe impl<T> Send for SpinLock<T> {}
+unsafe impl<T> Sync for SpinLock<T> {}
 
-impl<T> Spinlock<T> {
+impl<T> SpinLock<T> {
     pub const fn new(data: T) -> Self {
         Self {
             locked: AtomicBool::new(false),
@@ -23,7 +23,7 @@ impl<T> Spinlock<T> {
         }
     }
 
-    pub fn lock(&self) -> SpinlockGuard<T> {
+    pub fn lock(&self) -> SpinLockGuard<T> {
         // Disable interrupts
         unsafe {
             asm!("csrc sstatus, {}", in(reg) 1 << 1);
@@ -37,7 +37,7 @@ impl<T> Spinlock<T> {
             spin_loop();
         }
 
-        SpinlockGuard { lock: self }
+        SpinLockGuard { lock: self }
     }
 
     pub fn lock_with<F, R>(&self, f: F) -> R
@@ -49,11 +49,11 @@ impl<T> Spinlock<T> {
     }
 }
 
-pub struct SpinlockGuard<'a, T> {
-    lock: &'a Spinlock<T>,
+pub struct SpinLockGuard<'a, T> {
+    lock: &'a SpinLock<T>,
 }
 
-impl<'a, T> Deref for SpinlockGuard<'a, T> {
+impl<'a, T> Deref for SpinLockGuard<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -61,13 +61,13 @@ impl<'a, T> Deref for SpinlockGuard<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for SpinlockGuard<'a, T> {
+impl<'a, T> DerefMut for SpinLockGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.lock.data.get() }
     }
 }
 
-impl<'a, T> Drop for SpinlockGuard<'a, T> {
+impl<'a, T> Drop for SpinLockGuard<'a, T> {
     fn drop(&mut self) {
         self.lock.locked.store(false, Ordering::Release);
 

@@ -16,7 +16,8 @@ static UART: uart::NS16550a = uart::NS16550a::DEFAULT;
 
 fn main() {
     syscall::register_server(Some(u64::from_le_bytes(*b"log\0\0\0\0\0"))).unwrap();
-    syscall::identity_map(uart::BASE_ADDR..=uart::BASE_ADDR + 5);
+    syscall::identity_map(uart::BASE_ADDR..=uart::BASE_ADDR + 0x1000);
+    syscall::register_interrupt_handler(10, interrupt_handler);
 
     loop {
         let msg = ipc::Message::receive_blocking();
@@ -52,4 +53,14 @@ fn main() {
             }
         }
     }
+}
+
+extern "C" fn interrupt_handler() {
+    for b in b"IRQ: " {
+        UART.write(*b);
+    }
+    let i = UART.poll().unwrap();
+    UART.write(i);
+    UART.write(b'\n');
+    syscall::complete_interrupt();
 }

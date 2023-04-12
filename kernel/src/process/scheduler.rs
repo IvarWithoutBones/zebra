@@ -1,12 +1,12 @@
 use super::{Process, ProcessState};
-use crate::{ipc, spinlock::Spinlock, trap::clint};
+use crate::{ipc, spinlock::SpinLock, trap::clint};
 use alloc::collections::VecDeque;
 use core::arch::asm;
 
-pub static PROCESSES: Spinlock<ProcessList> = Spinlock::new(ProcessList::new());
+pub static PROCESSES: SpinLock<ProcessList> = SpinLock::new(ProcessList::new());
 
 pub struct ProcessList {
-    processes: VecDeque<Process>,
+    pub processes: VecDeque<Process>,
 }
 
 impl ProcessList {
@@ -64,32 +64,42 @@ pub fn schedule() -> ! {
             }
 
             let len = procs.processes.len();
-            let mut i = 0;
             let mut next_proc = procs.next().expect("no processes to schedule");
-            loop {
-                if i > len {
-                    return None;
-                }
+            let mut found = false;
 
+            for _ in 0..len {
                 match next_proc.state {
-                    ProcessState::Ready => break,
+                    ProcessState::Ready | ProcessState::HandlingInterrupt { .. } => {
+                        found = true;
+                        break;
+                    }
 
                     ProcessState::Sleeping { duration } => {
                         if clint::time_since_bootup() >= duration {
                             next_proc.state = ProcessState::Ready;
+                            found = true;
                             break;
                         }
                     }
 
                     ProcessState::MessageSent { receiver_sid } => {
                         let mut server_list = ipc::server_list().lock();
-                        let server = server_list.get_by_sid(receiver_sid).unwrap();
+                        let server = server_list.get_by_sid(receiver_sid).unwrap_or_else(|| {
+                            panic!(
+                                "attempted to look up non-existent server with SID {receiver_sid}!"
+                            )
+                        });
 
                         if server.has_messages() {
                             if let Some(server_proc) = procs.find_by_pid(server.process_id) {
-                                if let ProcessState::MessageReceived = server_proc.state {
+                                if let ProcessState::WaitUntilMessageReceived = server_proc.state {
                                     server_proc.state = ProcessState::Ready;
                                 }
+                            } else {
+                                panic!(
+                                    "attempted to wake up non-existent process with PID {}!",
+                                    server.process_id
+                                );
                             }
                         }
                     }
@@ -98,12 +108,20 @@ pub fn schedule() -> ! {
                 }
 
                 next_proc = procs.next().expect("no processes to schedule");
-                i += 1;
+            }
+
+            if !found {
+                return None;
+            }
+
+            if let ProcessState::HandlingInterrupt { .. } = next_proc.state {
+                // Do nothing
+            } else {
+                next_proc.state = ProcessState::Running;
             }
 
             // We need a reference to the process that remains valid *after* dropping the PROCESSES lock,
             // should probably use a smart pointer instead of the unsafe raw pointer.
-            next_proc.state = ProcessState::Running;
             let next_proc = next_proc as *mut _ as *mut Process;
             Some(unsafe { &mut *next_proc })
         });

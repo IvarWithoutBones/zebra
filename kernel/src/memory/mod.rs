@@ -2,7 +2,7 @@ mod allocator;
 pub mod page;
 pub mod sections;
 
-use crate::spinlock::SpinlockGuard;
+use crate::spinlock::SpinLockGuard;
 
 const PAGE_ORDER: usize = 12;
 pub const PAGE_SIZE: usize = 1 << PAGE_ORDER; // 4 KiB
@@ -10,7 +10,7 @@ pub const PAGE_SIZE: usize = 1 << PAGE_ORDER; // 4 KiB
 // TODO: Assuming 128 MiB of memory as qemu uses that.
 const TOTAL_PAGES: usize = (128 * (1024 * 1024)) / PAGE_SIZE;
 
-pub fn allocator() -> SpinlockGuard<'static, allocator::Allocator> {
+pub fn allocator() -> SpinLockGuard<'static, allocator::Allocator> {
     allocator::ALLOCATOR.lock()
 }
 
@@ -52,6 +52,12 @@ pub const fn align_page_down(val: usize) -> usize {
     align_down(val, PAGE_ORDER)
 }
 
+/// Check if an address is aligned to a page boundary.
+pub const fn is_page_aligned(val: usize) -> bool {
+    val % PAGE_SIZE == 0
+}
+
+/// Calculate the number of pages needed to store a given amount of bytes.
 pub const fn pages_needed(size: usize) -> usize {
     align_page_up(size) / PAGE_SIZE
 }
