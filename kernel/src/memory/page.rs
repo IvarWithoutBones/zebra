@@ -1,23 +1,36 @@
-use {
-    super::{align_page_down, align_page_up, PAGE_SIZE},
-    alloc::boxed::Box,
-    core::{arch::asm, ptr::read_volatile},
-};
+use super::{align_page_down, align_page_up, PAGE_SIZE};
+use crate::spinlock::{Spinlock, SpinlockGuard};
+use alloc::boxed::Box;
+use core::{arch::asm, mem::size_of, ptr::read_volatile};
 
-pub static mut KERNEL_PAGE_TABLE: Table = Table::new();
+pub static KERNEL_PAGE_TABLE: Spinlock<Table> = Spinlock::new(Table::new());
+const TABLE_LEN: usize = PAGE_SIZE / size_of::<Entry>();
 
-pub fn init() {
+pub fn root_table() -> SpinlockGuard<'static, Table> {
+    KERNEL_PAGE_TABLE.lock()
+}
+
+pub fn init(root_table: &Table) {
     unsafe {
         // NOTE: `sfence.vma` is not required, the TLB will be freshly populated on the next memory access
-        asm!("csrw satp, {}", in(reg) root_table().build_satp());
+        asm!("csrw satp, {}", in(reg) root_table.build_satp());
     }
 }
 
-pub fn root_table() -> &'static Table {
-    unsafe { &KERNEL_PAGE_TABLE as _ }
-}
+#[repr(transparent)]
+pub struct Page(pub [u8; PAGE_SIZE]);
 
-const TABLE_LEN: usize = 512;
+impl Page {
+    pub const fn new() -> Self {
+        Self([0; PAGE_SIZE])
+    }
+
+    pub fn from_slice(slice: &[u8]) -> Self {
+        let mut page = Self::new();
+        page.0[..slice.len()].copy_from_slice(slice);
+        page
+    }
+}
 
 /// <https://five-embeddev.com/riscv-isa-manual/latest/supervisor.html#sec:translation>
 #[allow(dead_code)]
@@ -55,10 +68,6 @@ pub struct Entry(usize);
 impl Entry {
     const fn is_valid(&self) -> bool {
         EntryAttributes::Valid.contains(self.0)
-    }
-
-    const fn is_user(&self) -> bool {
-        EntryAttributes::User.contains(self.0)
     }
 
     const fn is_leaf(&self) -> bool {
@@ -160,9 +169,10 @@ impl Table {
         self.map_addr(vaddr, paddr, flags, 0);
     }
 
+    /// Identity map the given inclusive range of addresses from physical to virtual memory
     pub fn identity_map(&mut self, start: usize, end: usize, flags: EntryAttributes) {
         let start = align_page_down(start);
-        let pages_needed = align_page_up(end + 1).saturating_sub(start) / PAGE_SIZE;
+        let pages_needed = (align_page_up(end + 1) - start) / PAGE_SIZE;
         for i in 0..pages_needed {
             let addr = start + (i * PAGE_SIZE);
             self.map_addr(addr, addr, flags.clone(), 0);
@@ -215,11 +225,9 @@ impl Drop for Table {
         for entry in self.entries.iter_mut() {
             if entry.is_valid() {
                 if entry.is_leaf() {
-                    if entry.is_user() {
-                        drop(unsafe { Box::from_raw(entry.paddr() as *mut [u8; PAGE_SIZE]) });
-                    }
+                    unsafe { core::ptr::drop_in_place(entry.paddr() as *mut Page) }
                 } else {
-                    drop(unsafe { Box::from_raw(entry.paddr() as *mut Table) });
+                    unsafe { core::ptr::drop_in_place(entry.paddr() as *mut Table) }
                 }
             }
         }

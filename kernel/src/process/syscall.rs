@@ -7,7 +7,7 @@ use crate::{
 use core::time::Duration;
 use syscall::SystemCall;
 
-pub fn handle() -> Option<()> {
+pub fn handle() {
     let mut procs = scheduler::PROCESSES.lock();
     let proc = procs.current().unwrap();
     let syscall = SystemCall::try_from(proc.trap_frame.registers[Registers::A7 as usize]);
@@ -19,6 +19,7 @@ pub fn handle() -> Option<()> {
         match syscall {
             SystemCall::Exit => {
                 let pid = procs.remove_current().unwrap().pid;
+                ipc::server_list().lock().remove_by_pid(pid);
                 println!("\nprocess {pid} gracefully exited");
             }
 
@@ -49,6 +50,7 @@ pub fn handle() -> Option<()> {
                     for i in 0..alloc.size_of(physical_addr as _) {
                         proc.page_table.unmap(ptr + i);
                     }
+
                     alloc.deallocate(physical_addr as _);
                 } else {
                     let pid = procs.remove_current().unwrap().pid;
@@ -62,8 +64,7 @@ pub fn handle() -> Option<()> {
                 let blocking = proc.trap_frame.registers[Registers::A2 as usize] != 0;
 
                 let elf = {
-                    let elf_ptr = { proc.page_table.physical_addr(elf_ptr as _)? };
-                    // The safety concerns from SystemCall::Print apply here as well
+                    let elf_ptr = { proc.page_table.physical_addr(elf_ptr as _).unwrap() };
                     unsafe { core::slice::from_raw_parts(elf_ptr as *const u8, elf_size as _) }
                 };
 
@@ -104,7 +105,6 @@ pub fn handle() -> Option<()> {
                 let start = proc.trap_frame.registers[Registers::A0 as usize] as usize;
                 let end = proc.trap_frame.registers[Registers::A1 as usize] as usize;
 
-                // TODO: Needs a spinlock.
                 let root_table = memory::page::root_table();
 
                 // TODO: this will not work if the given address is not already mapped by the kernel.
@@ -137,7 +137,7 @@ pub fn handle() -> Option<()> {
                 } else {
                     let pid = procs.remove_current().unwrap().pid;
                     println!("process {pid} tried to send a message without being a server. Killing process");
-                    return None;
+                    return;
                 };
 
                 if let Some(server) = server_list.get_by_sid(server_id) {
@@ -147,7 +147,7 @@ pub fn handle() -> Option<()> {
                         receiver_sid: server.server_id,
                     };
 
-                    procs.find_by_pid(server.process_id)?.state = ProcessState::Ready;
+                    procs.find_by_pid(server.process_id).unwrap().state = ProcessState::Ready;
                 } else {
                     let pid = procs.remove_current().unwrap().pid;
                     println!("process {pid} tried to send a message to a non-existent server {server_id}. Killing process");
@@ -164,7 +164,7 @@ pub fn handle() -> Option<()> {
                     proc.trap_frame.registers[Registers::A2 as usize..=Registers::A6 as usize]
                         .copy_from_slice(msg.data.as_slice());
 
-                    let mut sender = procs.find_by_pid(msg.sender_pid)?;
+                    let mut sender = procs.find_by_pid(msg.sender_pid).unwrap();
                     if let ProcessState::MessageSent { receiver_sid } = sender.state {
                         if receiver_sid == server.server_id {
                             sender.state = ProcessState::Ready;
@@ -193,8 +193,6 @@ pub fn handle() -> Option<()> {
         let offender = procs.remove_current().unwrap().pid;
         println!("killed process {offender} because of an invalid system call: {syscall:?}");
     }
-
-    Some(())
 }
 
 #[cfg(test)]

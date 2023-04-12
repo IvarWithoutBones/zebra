@@ -103,6 +103,7 @@ pub fn schedule() -> ! {
 
             // We need a reference to the process that remains valid *after* dropping the PROCESSES lock,
             // should probably use a smart pointer instead of the unsafe raw pointer.
+            next_proc.state = ProcessState::Running;
             let next_proc = next_proc as *mut _ as *mut Process;
             Some(unsafe { &mut *next_proc })
         });

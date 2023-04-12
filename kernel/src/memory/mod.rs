@@ -21,13 +21,13 @@ pub unsafe fn init() {
 
     println!("mapping kernel sections...");
     // Some funky unsafe magic to get around the borrow checker
-    let root_table: &mut page::Table = &mut *(&mut page::KERNEL_PAGE_TABLE as *mut _);
-    sections::map_kernel(root_table);
+    let mut root_table = page::root_table();
+    sections::map_kernel(&mut root_table);
     println!("succesfully mapped kernel sections");
 
     // TODO: This must be called for every hart, will need to be moved later
     println!("enabling paging...");
-    page::init();
+    page::init(&root_table);
     println!("paging enabled");
 }
 
@@ -50,6 +50,14 @@ pub const fn align_page_up(val: usize) -> usize {
 /// Align an address to the begin of a page.
 pub const fn align_page_down(val: usize) -> usize {
     align_down(val, PAGE_ORDER)
+}
+
+pub const fn pages_needed(size: usize) -> usize {
+    align_page_up(size) / PAGE_SIZE
+}
+
+pub fn page_offsets(size: usize) -> impl Iterator<Item = usize> {
+    (0..pages_needed(size)).map(|i| i * PAGE_SIZE)
 }
 
 #[cfg(test)]

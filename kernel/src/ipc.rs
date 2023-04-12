@@ -118,6 +118,15 @@ impl ServerList {
     pub fn get_by_sid(&mut self, server_id: u64) -> Option<&mut Server> {
         self.servers.iter_mut().find(|s| s.server_id == server_id)
     }
+
+    pub fn remove_by_pid(&mut self, process_id: usize) -> Option<Server> {
+        for server in self.servers.iter_mut() {
+            server.messages.retain(|m| m.sender_pid != process_id);
+        }
+
+        let index = self.servers.iter().position(|s| s.process_id == process_id)?;
+        Some(self.servers.remove(index))
+    }
 }
 
 pub fn server_list() -> &'static Spinlock<ServerList> {

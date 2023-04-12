@@ -5,7 +5,7 @@ pub mod trapframe;
 use self::trapframe::TrapFrame;
 use crate::{
     elf::load_elf,
-    memory::{allocator, page, sections::map_trampoline, PAGE_SIZE},
+    memory::{align_page_down, allocator, page, sections::map_trampoline, PAGE_SIZE},
 };
 use alloc::boxed::Box;
 use core::{
@@ -15,16 +15,16 @@ use core::{
     time::Duration,
 };
 
-const STACK_SIZE: usize = 40 * PAGE_SIZE;
-const TRAPFRAME_ADDR: usize = 0x1000;
-static NEXT_PID: AtomicUsize = AtomicUsize::new(1);
-
-global_asm!(include_str!("context_switch.s"), TRAPFRAME_ADDR = const TRAPFRAME_ADDR);
-
 extern "C" {
     // Defined in `context_switch.s`
     fn user_enter(trap_frame: *const TrapFrame) -> !;
 }
+
+const STACK_SIZE: usize = 40 * PAGE_SIZE;
+const TRAPFRAME_ADDR: usize = align_page_down(usize::MAX);
+static NEXT_PID: AtomicUsize = AtomicUsize::new(1);
+
+global_asm!(include_str!("context_switch.s"), TRAPFRAME_ADDR = const TRAPFRAME_ADDR);
 
 #[derive(Debug, PartialEq, Eq)]
 enum ProcessState {
@@ -46,10 +46,10 @@ pub struct Process {
 
 impl Process {
     pub fn new(elf: &[u8]) -> Self {
-        let user_stack = { allocator().allocate(STACK_SIZE).unwrap() };
-        // Used when trapping into the kernel, desperately needs a guard page.
-        let kernel_stack = { allocator().allocate(STACK_SIZE).unwrap() };
         let mut page_table = Box::new(page::Table::new());
+        // TODO: both stacks desperately need a guard page beneath to catch stack overflows
+        let user_stack = { allocator().allocate(STACK_SIZE).unwrap() }; // For the user itself.
+        let kernel_stack = { allocator().allocate(STACK_SIZE).unwrap() }; // For trapping into the kernel
 
         // Map the initialisation code so that we can enter user mode after switching to the new page table
         page_table.identity_map(
@@ -96,7 +96,6 @@ impl Process {
     }
 
     pub fn run(&mut self) -> ! {
-        self.state = ProcessState::Running;
         unsafe { user_enter(self.trap_frame.as_ptr()) }
     }
 }
