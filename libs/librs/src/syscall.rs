@@ -189,11 +189,13 @@ pub fn register_interrupt_handler(interrupt: u64, handler: extern "C" fn()) {
     }
 }
 
-pub fn complete_interrupt() {
+pub fn complete_interrupt() -> ! {
     unsafe {
         asm!("ecall",
             in("a7") SystemCall::CompleteInterrupt as usize,
             options(nomem, nostack)
         );
     }
+
+    unreachable!()
 }

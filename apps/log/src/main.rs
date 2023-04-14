@@ -3,8 +3,10 @@
 #![no_std]
 #![no_main]
 
+use alloc::collections::VecDeque;
 use librs::{
     ipc::{self, MessageData},
+    mutex::Mutex,
     syscall,
 };
 use log_server::{Reply, Request};
@@ -13,6 +15,7 @@ librs::main!(main);
 
 // NOTE: this is never initialized as that will be done by the kernel for debug purposes
 static UART: uart::NS16550a = uart::NS16550a::DEFAULT;
+static INPUT_BUFFER: Mutex<VecDeque<u8>> = Mutex::new(VecDeque::new());
 
 fn main() {
     syscall::register_server(Some(u64::from_le_bytes(*b"log\0\0\0\0\0"))).unwrap();
@@ -25,7 +28,7 @@ fn main() {
 
         match Request::from(msg) {
             Request::Read => {
-                if let Some(b) = UART.poll() {
+                if let Some(b) = INPUT_BUFFER.lock().pop_front() {
                     // TODO: reply with more data if available
                     let data = MessageData::from(b as u64);
 
@@ -56,11 +59,12 @@ fn main() {
 }
 
 extern "C" fn interrupt_handler() {
-    for b in b"IRQ: " {
-        UART.write(*b);
+    let mut buf = INPUT_BUFFER.lock();
+    while let Some(b) = UART.poll() {
+        buf.push_back(b);
     }
-    let i = UART.poll().unwrap();
-    UART.write(i);
-    UART.write(b'\n');
+
+    // TODO: how do we run destructors prior to the kernel taking over?
+    drop(buf);
     syscall::complete_interrupt();
 }

@@ -7,6 +7,7 @@
 pub mod print;
 pub mod allocator;
 pub mod ipc;
+pub mod mutex;
 pub mod syscall;
 pub mod test;
 

@@ -13,6 +13,7 @@ pub struct MessageData {
 
 impl MessageData {
     pub const DEFAULT: MessageData = MessageData { data: [0; 5] };
+    pub const LEN: usize = 5;
 
     pub const fn new(data: [u64; 5]) -> MessageData {
         MessageData { data }
