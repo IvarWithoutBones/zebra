@@ -23,6 +23,11 @@ pub fn handle() {
                 println!("\nprocess {pid} gracefully exited");
             }
 
+            SystemCall::Yield => {
+                // Trapping into the kernel will automatically rotate the schedulers queue, so we dont need to do anything here.
+                // Optimally we would schedule another process if a time slice has expired, but this is fine for now.
+            }
+
             SystemCall::Allocate => {
                 let size = proc.trap_frame.registers[Registers::A0 as usize] as usize;
 

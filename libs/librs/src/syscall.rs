@@ -1,7 +1,6 @@
+use crate::ipc::MessageData;
 use core::{arch::asm, ops::RangeInclusive, time::Duration};
 use syscall::SystemCall;
-
-use crate::ipc::MessageData;
 
 /// Exit the current process.
 pub fn exit() -> ! {
@@ -9,6 +8,16 @@ pub fn exit() -> ! {
         asm!("ecall",
             in("a7") SystemCall::Exit as usize,
             options(noreturn, nomem, nostack)
+        );
+    }
+}
+
+/// Give up the CPU until it is scheduled again.
+pub fn yield_() {
+    unsafe {
+        asm!("ecall",
+            in("a7") SystemCall::Yield as usize,
+            options(nomem, nostack)
         );
     }
 }
@@ -178,6 +187,7 @@ pub fn register_server(public_name: Option<u64>) -> Option<u64> {
     }
 }
 
+/// Register a function as the handler for a given interrupt, must call `complete_interrupt` when done.
 pub fn register_interrupt_handler(interrupt: u64, handler: extern "C" fn()) {
     unsafe {
         asm!("ecall",
@@ -189,6 +199,7 @@ pub fn register_interrupt_handler(interrupt: u64, handler: extern "C" fn()) {
     }
 }
 
+/// Complete an interrupt, must always and only be called after an interrupt handler has finished.
 pub fn complete_interrupt() -> ! {
     unsafe {
         asm!("ecall",

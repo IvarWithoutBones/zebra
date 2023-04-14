@@ -62,12 +62,12 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn map_user_stack(page_table: &mut page::Table) -> *mut u8 {
+    pub fn map_user_stack(page_table: &mut page::Table, size: usize) -> *mut u8 {
         // TODO: guard page
         let user_stack = { allocator().allocate(STACK_SIZE).unwrap() };
 
         // Map the users stack
-        for page in 0..STACK_SIZE {
+        for page in 0..size {
             page_table.map_page(
                 user_stack as usize + (page * PAGE_SIZE),
                 user_stack as usize + (page * PAGE_SIZE),
@@ -75,14 +75,14 @@ impl Process {
             );
         }
 
-        unsafe { user_stack.add(STACK_SIZE) }
+        unsafe { user_stack.add(size) }
     }
 
     pub fn new(elf: &[u8]) -> Self {
         let mut page_table = Box::new(page::Table::new());
         // TODO: both stacks desperately need a guard page beneath to catch stack overflows
         let kernel_stack = { allocator().allocate(STACK_SIZE).unwrap() }; // For trapping into the kernel
-        let user_stack = Self::map_user_stack(&mut page_table);
+        let user_stack = Self::map_user_stack(&mut page_table, STACK_SIZE);
 
         // Map the initialisation code so that we can enter user mode after switching to the new page table
         page_table.identity_map(

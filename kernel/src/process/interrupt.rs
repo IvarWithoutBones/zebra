@@ -1,4 +1,5 @@
 use super::{scheduler, trapframe::Registers, Process, ProcessState};
+use crate::memory::PAGE_SIZE;
 use alloc::boxed::Box;
 
 /// Handle an external interrupt for the given process, by context switching into its designated handler.
@@ -13,12 +14,6 @@ pub fn handle(interrupt_id: u32, handler_ptr: usize, pid: usize) {
         }
 
         let proc = procs.find_by_pid(pid).unwrap();
-
-        if let ProcessState::HandlingInterrupt { .. } = proc.state {
-            // TODO: dont just drop the current interrupt
-            return None;
-        }
-
         let old_state = Box::new(proc.state.clone());
         let old_registers = Box::new(proc.trap_frame.registers);
 
@@ -32,8 +27,8 @@ pub fn handle(interrupt_id: u32, handler_ptr: usize, pid: usize) {
         // Ensure we dont depend on any previous state (except `SATP`)
         proc.trap_frame.registers[Registers::ProgramCounter as _..].fill(0);
 
-        // Allocate a new stack for the interrupt handler
-        let new_stack = Process::map_user_stack(&mut proc.page_table);
+        // Allocate a new stack for the interrupt handler, a single page should be plenty
+        let new_stack = Process::map_user_stack(&mut proc.page_table, PAGE_SIZE);
         proc.trap_frame.registers[Registers::StackPointer as usize] = new_stack as _;
 
         // Start execution at the interrupt handler

@@ -1,3 +1,4 @@
+use crate::syscall;
 use core::{
     cell::UnsafeCell,
     ops::{Deref, DerefMut},
@@ -25,7 +26,7 @@ impl<T> Mutex<T> {
             .locked
             .swap(true, core::sync::atomic::Ordering::Acquire)
         {
-            // TODO: yield instead of busy waiting
+            syscall::yield_();
         }
 
         MutexGuard { lock: self }
