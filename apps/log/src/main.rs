@@ -3,24 +3,68 @@
 #![no_std]
 #![no_main]
 
-use alloc::collections::VecDeque;
+use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use librs::{
     ipc::{self, MessageData},
-    mutex::Mutex,
     syscall,
 };
 use log_server::{Reply, Request};
 
 librs::main!(main);
 
+/// A fixed size atomic queue for storing data in a circular buffer. Useful for saving data from interrupt handlers.
+struct AtomicQueue<const LEN: usize> {
+    read_index: AtomicUsize,
+    write_index: AtomicUsize,
+    buffer: [AtomicU8; LEN],
+}
+
+impl<const LEN: usize> AtomicQueue<LEN> {
+    // An AtomicU8 is not Copy, because of which we cannot initialize an array of them without using a const.
+    #[allow(clippy::declare_interior_mutable_const)] // We're never mutating this
+    const BUFFER_ELEM_INIT: AtomicU8 = AtomicU8::new(u8::MAX);
+
+    pub const fn new() -> Self {
+        Self {
+            read_index: AtomicUsize::new(0),
+            write_index: AtomicUsize::new(0),
+            buffer: [Self::BUFFER_ELEM_INIT; LEN],
+        }
+    }
+
+    #[inline]
+    fn to_index(&self, value: &AtomicUsize) -> usize {
+        value.load(Ordering::Acquire) % LEN
+    }
+
+    pub fn push(&self, data: u8) {
+        let write_index = self.to_index(&self.write_index);
+        self.buffer[write_index].store(data, Ordering::Relaxed);
+        self.write_index.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn pop(&self) -> Option<u8> {
+        let read_index = self.to_index(&self.read_index);
+        let write_index = self.to_index(&self.write_index);
+
+        if read_index == write_index {
+            None
+        } else {
+            self.read_index.fetch_add(1, Ordering::Relaxed);
+            let value = self.buffer[read_index].load(Ordering::Relaxed);
+            Some(value)
+        }
+    }
+}
+
 // NOTE: this is never initialized as that will be done by the kernel for debug purposes
 static UART: uart::NS16550a = uart::NS16550a::DEFAULT;
-static INPUT_BUFFER: Mutex<VecDeque<u8>> = Mutex::new(VecDeque::new());
+static INPUT_QUEUE: AtomicQueue<32> = AtomicQueue::new();
 
 fn main() {
     syscall::register_server(Some(u64::from_le_bytes(*b"log\0\0\0\0\0"))).unwrap();
     syscall::identity_map(uart::BASE_ADDR..=uart::BASE_ADDR + 0x1000);
-    syscall::register_interrupt_handler(10, interrupt_handler);
+    syscall::register_interrupt_handler(uart::INTERRUPT_ID, interrupt_handler);
 
     loop {
         let msg = ipc::Message::receive_blocking();
@@ -28,7 +72,7 @@ fn main() {
 
         match Request::from(msg) {
             Request::Read => {
-                if let Some(b) = INPUT_BUFFER.lock().pop_front() {
+                if let Some(b) = INPUT_QUEUE.pop() {
                     // TODO: reply with more data if available
                     let data = MessageData::from(b as u64);
 
@@ -58,13 +102,11 @@ fn main() {
     }
 }
 
+// Will be called by the kernel when data is submitted to the UART
 extern "C" fn interrupt_handler() {
-    let mut buf = INPUT_BUFFER.lock();
     while let Some(b) = UART.poll() {
-        buf.push_back(b);
+        INPUT_QUEUE.push(b);
     }
 
-    // TODO: how do we run destructors prior to the kernel taking over?
-    drop(buf);
     syscall::complete_interrupt();
 }

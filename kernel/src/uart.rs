@@ -8,7 +8,7 @@ pub static UART: SpinLock<uart::NS16550a> = SpinLock::new(NS16550a::DEFAULT);
 
 impl InterruptDevice for SpinLock<uart::NS16550a> {
     fn identifier(&self) -> u16 {
-        10
+        uart::INTERRUPT_ID as _
     }
 
     fn priority(&self) -> u8 {

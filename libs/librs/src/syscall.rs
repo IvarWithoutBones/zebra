@@ -188,6 +188,7 @@ pub fn register_server(public_name: Option<u64>) -> Option<u64> {
 }
 
 /// Register a function as the handler for a given interrupt, must call `complete_interrupt` when done.
+/// Note that this function may not block, nor lock any mutexes. Doing so can cause a deadlock.
 pub fn register_interrupt_handler(interrupt: u64, handler: extern "C" fn()) {
     unsafe {
         asm!("ecall",
@@ -204,9 +205,7 @@ pub fn complete_interrupt() -> ! {
     unsafe {
         asm!("ecall",
             in("a7") SystemCall::CompleteInterrupt as usize,
-            options(nomem, nostack)
+            options(nomem, nostack, noreturn)
         );
     }
-
-    unreachable!()
 }

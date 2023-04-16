@@ -12,6 +12,7 @@ fn test_runner(tests: &[&dyn Fn()]) {
 
 // See docs/device-trees/qemu-virt.dts
 pub const BASE_ADDR: u64 = 0x1000_0000;
+pub const INTERRUPT_ID: u64 = 10;
 
 pub trait UartRegister {
     fn ptr_offset() -> usize;
