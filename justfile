@@ -66,6 +66,7 @@ run kernel_path=(kernel_image_path) *args="":
         -serial mon:stdio \
         -drive file=./foo.tar,format=raw,if=none,id=x0 \
         -device virtio-blk-device,drive=x0 \
+        -global virtio-mmio.force-legacy=false \
         {{ qemu_extra_args }} \
         -kernel {{ kernel_path }}
 

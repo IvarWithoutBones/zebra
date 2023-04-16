@@ -20,7 +20,7 @@ const PAGE_SIZE: u64 = 4096;
 
 // TODO: dont hardcode this
 const VIRTIO_RANGE: RangeInclusive<u64> = 0x10001000..=0x10008000;
-const VIRTIO_LEN: u64 = 0x1000;
+const VIRTIO_LEN: usize = 0x1000;
 
 const MAGIC: u32 = u32::from_le_bytes(*b"virt");
 
@@ -79,9 +79,56 @@ impl TryFrom<u32> for DeviceIdentifier {
     }
 }
 
+/// NOTE: this refers to the non-legacy version of MMIO registers.
+/// https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html#x1-1460002
+#[derive(Debug)]
+enum DeviceRegister {
+    Magic = 0x0,
+    Version = 0x4,
+    DeviceId = 0x8,
+    VendorId = 0xc,
+    DeviceFeatures = 0x10,
+    DeviceFeatureSelection = 0x14,
+    DriverFeatures = 0x20,
+    DriverFeatureSelection = 0x24,
+    QueueSelector = 0x30,
+    QueueNumberMax = 0x34,
+    QueueNumber = 0x38,
+    QueueReady = 0x44,
+    QueueNotify = 0x50,
+    InterruptStatus = 0x60,
+    InterruptAcknowledge = 0x64,
+    Status = 0x70,
+    QueueDescriptorLow = 0x80,
+    QueueDescriptorHigh = 0x84,
+    QueueDriverLow = 0x90,
+    QueueDriverHigh = 0x94,
+    QueueDeviceLow = 0xa0,
+    QueueDeviceHigh = 0xa4,
+    ConfigGeneration = 0xfc,
+    Config = 0x100, // NOTE: this is an offset, not a register
+}
+
+impl DeviceRegister {
+    #[inline]
+    unsafe fn into_ptr<T, R>(self, base: *mut T) -> *mut R {
+        // Looks a bit funky because `byte_offset` isn't stable yet, but whatever
+        (base as *mut u8).add(self as _) as *mut R
+    }
+
+    #[inline]
+    fn read<T>(self, base: *mut T) -> T {
+        unsafe { self.into_ptr::<T, T>(base).read_volatile() }
+    }
+
+    #[inline]
+    fn write<T>(self, base: *mut T, value: T) {
+        unsafe { self.into_ptr::<T, T>(base).write_volatile(value) }
+    }
+}
+
 /// Block device: https://docs.oasis-open.org/virtio/virtio/v1.1/csprd01/virtio-v1.1-csprd01.html#x1-2420003
 /// Generic: https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html#x1-4100006
-/// Generic (legacy): https://docs.oasis-open.org/virtio/virtio/v1.1/csprd01/virtio-v1.1-csprd01.html#x1-4130003
 #[bitfield(u32, default: 0)]
 #[derive(PartialEq, Eq)]
 struct BlockDeviceFeatureFlags {
@@ -121,47 +168,92 @@ impl fmt::Debug for BlockDeviceFeatureFlags {
     }
 }
 
-/// NOTE: This refers to the legacy MMIO interface, as that is what qemu uses.
-/// https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html#x1-1560004
+/// https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html#x1-2440004
 #[derive(Debug)]
-enum DeviceRegister {
-    Magic = 0x0,
-    Version = 0x4,
-    DeviceId = 0x8,
-    VendorId = 0xc,
-    HostFeatures = 0x10,
-    HostFeaturesSelection = 0x14,
-    GuestFeatures = 0x20,
-    GuestFeaturesSelection = 0x24,
-    GuestPageSize = 0x28,
-    QueueSelector = 0x30,
-    QueueNumMax = 0x34,
-    QueueNum = 0x38,
-    QueueAlign = 0x3c,
-    QueuePhysicalFrameNumber = 0x40,
-    QueueNotify = 0x50,
-    InterruptStatus = 0x60,
-    InterruptAcknowledge = 0x64,
-    Status = 0x70,
-    Config = 0x100,
+#[repr(C)]
+struct BlockDeviceGeometry {
+    cylinders: u16,
+    heads: u8,
+    sectors: u8,
 }
 
-impl DeviceRegister {
-    #[inline]
-    unsafe fn into_ptr<T>(self, base: *mut T) -> *mut T {
-        // Looks a bit funky because `byte_offset` isn't stable yet, but whatever
-        (base as *mut u8).add(self as _) as *mut T
-    }
+/// https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html#x1-2440004
+#[derive(Debug)]
+#[repr(C)]
+struct BlockDeviceTopology {
+    physical_block_exp: u8,
+    alignment_offset: u8,
+    minimum_io_size: u16,
+    optimal_io_size: u32,
+}
 
-    #[inline]
-    fn read<T>(self, base: *mut T) -> T {
-        unsafe { self.into_ptr(base).read_volatile() }
-    }
+/// https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html#x1-2440004
+#[repr(C)]
+struct BlockDeviceConfig {
+    capacity: u64,
+    size_max: u32,
+    segment_max: u32,
+    geometry: BlockDeviceGeometry,
+    topology: BlockDeviceTopology,
+    writeback: u8,
+    _unused_0: [u8; 3],
+    max_discard_sectors: u32,
+    max_discard_segments: u32,
+    discard_sector_alignment: u32,
+    max_write_zeroes_sectors: u32,
+    max_write_zeroes_segments: u32,
+    write_zeroes_may_unmap: u8,
+    _unused_1: [u8; 3],
+}
 
-    #[inline]
-    fn write<T>(self, base: *mut T, value: T) {
-        unsafe { self.into_ptr(base).write_volatile(value) }
+impl BlockDeviceConfig {
+    // TODO: do this in a safe way.
+    unsafe fn from_ptr(base: *mut u32) -> Self {
+        DeviceRegister::Config
+            .into_ptr::<u32, Self>(base)
+            .read_volatile()
     }
+}
+
+impl fmt::Debug for BlockDeviceConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BlockDeviceConfig")
+            .field("capacity", &self.capacity)
+            .field("size_max", &self.size_max)
+            .field("segment_max", &self.segment_max)
+            .field("geometry", &self.geometry)
+            .field("topology", &self.topology)
+            .field("writeback", &self.writeback)
+            .field("max_discard_sectors", &self.max_discard_sectors)
+            .field("max_discard_segments", &self.max_discard_segments)
+            .field("discard_sector_alignment", &self.discard_sector_alignment)
+            .field("max_write_zeroes_sectors", &self.max_write_zeroes_sectors)
+            .field("max_write_zeroes_segments", &self.max_write_zeroes_segments)
+            .field("write_zeroes_may_unmap", &self.write_zeroes_may_unmap)
+            .finish()
+    }
+}
+
+/// https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html#x1-2500006
+#[derive(Debug)]
+#[repr(u32)]
+enum BlockDeviceRequestType {
+    Read = 0,
+    Write = 1,
+    Flush = 4,
+    Discard = 11,
+    WriteZeroes = 13,
+}
+
+/// https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html#x1-2500006
+#[derive(Debug)]
+#[repr(C)]
+struct BlockDeviceRequest {
+    request_type: u32,
+    reserved: u32,
+    sector: u64,
+    data: [u8; 512], // TODO: this is variable
+    status: u8,
 }
 
 #[derive(Debug)]
@@ -175,22 +267,22 @@ struct BlockDevice {
 
 impl BlockDevice {
     /// https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html#x1-920001
-    fn new(dev_ptr: *mut u32) -> Self {
+    fn new(device_ptr: *mut u32) -> Self {
         // 1. Reset the device.
-        DeviceRegister::Status.write(dev_ptr, 0);
+        DeviceRegister::Status.write(device_ptr, 0);
 
         // 2. Set the ACKNOWLEDGE status bit: the guest OS has noticed the device.
         let mut status = DeviceStatus::new().with_acknowledge(true);
-        DeviceRegister::Status.write(dev_ptr, status.raw_value());
+        DeviceRegister::Status.write(device_ptr, status.raw_value());
 
         // 3. Set the DRIVER status bit: the guest OS knows how to drive the device.
         status = status.with_driver(true);
-        DeviceRegister::Status.write(dev_ptr, status.raw_value());
+        DeviceRegister::Status.write(device_ptr, status.raw_value());
 
         // 4. Read device feature bits, and write the subset of feature bits understood by the OS and driver to the device.
         //    During this step the driver MAY read (but MUST NOT write) the device-specific configuration fields to check that it can support the device before accepting it.
         let host_features: BlockDeviceFeatureFlags =
-            DeviceRegister::HostFeatures.read(dev_ptr).into();
+            DeviceRegister::DeviceFeatures.read(device_ptr).into();
         let accepted_features = host_features
             .with_read_only(false)
             .with_config_wce(false)
@@ -198,36 +290,39 @@ impl BlockDevice {
             .with_scsi_packet_command(false)
             .with_ring_indirect_desc(false)
             .with_ring_event_idx(false);
-        DeviceRegister::GuestFeatures.write(dev_ptr, accepted_features.raw_value());
+        DeviceRegister::DriverFeatures.write(device_ptr, accepted_features.raw_value());
 
         // 5. Set the FEATURES_OK status bit. The driver MUST NOT accept new feature bits after this step.
-        // NOTE: Omitted in the legacy interface.
+        status = status.with_features_ok(true);
+        DeviceRegister::Status.write(device_ptr, status.raw_value());
 
         // 6. Re-read device status to ensure the FEATURES_OK bit is still set: otherwise, the device does not support our subset of features and the device is unusable.
-        // NOTE: Omitted in the legacy interface.
+        status = DeviceStatus::new_with_raw_value(DeviceRegister::Status.read(device_ptr));
+        assert!(
+            status.features_ok(),
+            "device does not support requested features"
+        );
 
         // 7. Perform device-specific setup, including discovery of virtqueues for the device, optional per-bus setup, reading and possibly writing the device’s virtio configuration space, and population of virtqueues.
-        DeviceRegister::GuestPageSize.write(dev_ptr, PAGE_SIZE as _);
+        let config = unsafe { BlockDeviceConfig::from_ptr(device_ptr) };
+        println!("{config:#?}");
 
         // Set the queue selector and size
-        DeviceRegister::QueueSelector.write(dev_ptr, 0);
-        let queue_num_max = DeviceRegister::QueueNumMax.read(dev_ptr);
+        DeviceRegister::QueueSelector.write(device_ptr, 0);
+        let queue_num_max = DeviceRegister::QueueNumberMax.read(device_ptr);
         assert!(queue_num_max >= QUEUE_SIZE as _);
-        DeviceRegister::QueueNum.write(dev_ptr, QUEUE_SIZE as _);
+        DeviceRegister::QueueNumber.write(device_ptr, QUEUE_SIZE as _);
 
-        // Set up a queue and tell the device where it is
+        // TODO: tell the device about the queue
         let queue = Queue::new();
-        let queue_ptr = Box::into_raw(queue) as usize;
-        DeviceRegister::QueuePhysicalFrameNumber
-            .write(dev_ptr, queue_ptr as u32 / PAGE_SIZE as u32);
 
         // 8. Set the DRIVER_OK status bit. At this point the device is “live”.
         status = status.with_driver_ok(true);
-        DeviceRegister::Status.write(dev_ptr, status.raw_value());
+        DeviceRegister::Status.write(device_ptr, status.raw_value());
 
         BlockDevice {
-            queue: unsafe { Box::from_raw(queue_ptr as *mut Queue) },
-            device_ptr: dev_ptr,
+            queue,
+            device_ptr,
             index: 0,
             acknowledge_used_index: 0,
             read_only: true,
@@ -265,7 +360,7 @@ fn main() {
     println!("virtio driver startup");
 
     for (index, dev_ptr) in VIRTIO_RANGE
-        .step_by(VIRTIO_LEN as _)
+        .step_by(VIRTIO_LEN)
         .map(|d| d as *mut u32)
         .enumerate()
     {
@@ -282,12 +377,21 @@ fn main() {
             continue;
         }
 
-        if version != 1 {
-            println!("unsupported virtio standard {version}");
-            continue;
+        match version {
+            1 => {
+                println!("device {index}: unsupported legacy virtio standard {version}");
+                continue;
+            }
+
+            2 => (),
+
+            _ => {
+                println!("device {index}: unsupported virtio standard {version}");
+                continue;
+            }
         }
 
-        println!("found {device_id:?} at {dev_ptr:?} ({index}), vendor_id: {vendor_id}");
+        println!("found {device_id:?} {index} at {dev_ptr:?}: vendor_id = {vendor_id}, virtio = {version}");
         match device_id {
             DeviceIdentifier::BlockDevice => virtio.add_block_device(index, dev_ptr),
             _ => println!("unimplemented device type {device_id:?}"),
