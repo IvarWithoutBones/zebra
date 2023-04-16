@@ -219,6 +219,12 @@ pub fn handle() {
                     interrupt_id,
                 } = proc.state.clone()
                 {
+                    // Deallocate the IRQ contexts stack
+                    let sp = proc.trap_frame.registers[Registers::StackPointer as usize] as _;
+                    proc.page_table.unmap(sp);
+                    memory::allocator().deallocate(sp as _);
+
+                    // Restore the state before the interrupt
                     proc.trap_frame.registers = *old_registers;
                     proc.state = *old_state;
                     plic::complete(interrupt_id);

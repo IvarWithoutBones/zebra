@@ -1,10 +1,8 @@
-use {
-    super::{align_page_up, sections, PAGE_SIZE, TOTAL_PAGES},
-    crate::spinlock::SpinLock,
-    core::{
-        alloc::{GlobalAlloc, Layout},
-        ptr,
-    },
+use super::{align_page_up, sections, PAGE_SIZE, TOTAL_PAGES};
+use crate::spinlock::SpinLock;
+use core::{
+    alloc::{GlobalAlloc, Layout},
+    ptr,
 };
 
 #[global_allocator]
@@ -95,6 +93,7 @@ impl Allocator {
 }
 
 // NOTE: Before this is called heap allocations will deadlock the kernel!
+// TODO: use core::cell::OnceCell once it is stabilized.
 pub unsafe fn init() {
     ALLOCATOR.lock_with(|alloc| {
         alloc.base_addr = align_page_up(sections::heap_start());
