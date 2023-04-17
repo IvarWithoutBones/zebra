@@ -51,8 +51,8 @@ check:
     cargo test --bin zebra-kernel
     @echo "tests passed"
 
-mktar:
-    tar --format=ustar -cf foo.tar ./libs
+diskimage contents="./libs":
+    tar --format=ustar --create --file disk-image.tar {{ contents }}
 
 # Run the kernel in QEMU
 run kernel_path=(kernel_image_path) *args="":
@@ -64,7 +64,7 @@ run kernel_path=(kernel_image_path) *args="":
         -m 128M \
         -nographic \
         -serial mon:stdio \
-        -drive file=./foo.tar,format=raw,if=none,id=x0 \
+        -drive file=./disk-image.tar,format=raw,if=none,id=x0 \
         -device virtio-blk-device,drive=x0 \
         -global virtio-mmio.force-legacy=false \
         {{ qemu_extra_args }} \

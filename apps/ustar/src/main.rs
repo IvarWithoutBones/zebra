@@ -14,12 +14,6 @@ use alloc::{
 };
 use binrw::{binrw, BinRead, BinReaderExt, NullString};
 
-// Note that the binary *cannot* be bigger than ~1MB for some reason, strip according to
-// https://github.com/johnthagen/min-sized-rust. After that, run:
-// $ tar --format=ustar -cf foo.tar ./hello
-// const TARBALL: &[u8] = include_bytes!("../../../hello.tar");
-const TARBALL: &[u8] = include_bytes!("../../../foo.tar");
-
 const fn round_to_block(num: u64) -> u64 {
     const BLOCK_SIZE: u64 = 512;
     let remainder = num % BLOCK_SIZE;
@@ -156,15 +150,41 @@ impl<'a> Index<&str> for TarBall<'a> {
     }
 }
 
-fn print(f: &File) {
-    println!("```\n{}```\n", core::str::from_utf8(f.content).unwrap());
-}
-
 fn main() {
     librs::syscall::register_server(None);
+    println!("[ustar] asking for data");
 
-    let tarball = TarBall::new(TARBALL);
+    let capacity_reply = librs::ipc::MessageBuilder::new(123)
+        .with_identifier(2)
+        .build()
+        .send_receive()
+        .unwrap();
+    println!("[ustar] capacity: {:#x}", capacity_reply.data[0]);
+
+    let mut buf = alloc::vec![0; capacity_reply.data[0] as usize];
+    for sector in 0..(capacity_reply.data[0] / 512) {
+        let reply = librs::ipc::MessageBuilder::new(123)
+            .with_identifier(1)
+            .with_data(sector.into())
+            .build()
+            .send_receive()
+            .unwrap();
+
+        let contents = {
+            // TODO: shared memory
+            let aligned = reply.data[0] & !0xfff;
+            librs::syscall::identity_map(aligned..=aligned + 0x1000);
+
+            unsafe { core::slice::from_raw_parts_mut(reply.data[0] as *mut u8, 512) }
+        };
+
+        buf[sector as usize * 512..(sector as usize + 1) * 512].copy_from_slice(contents);
+        println!("[ustar] got sector {:#x}", sector);
+    }
+
+    let tarball = TarBall::new(&buf);
     println!("{:#?}\n", tarball);
 
-    print(&tarball["./libs/librs/Cargo.toml"]);
+    let bin = &tarball["./target/riscv64gc-unknown-none-elf/debug/hello"].content;
+    librs::syscall::spawn(bin, true);
 }

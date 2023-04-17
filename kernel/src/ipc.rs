@@ -124,7 +124,10 @@ impl ServerList {
             server.messages.retain(|m| m.sender_pid != process_id);
         }
 
-        let index = self.servers.iter().position(|s| s.process_id == process_id)?;
+        let index = self
+            .servers
+            .iter()
+            .position(|s| s.process_id == process_id)?;
         Some(self.servers.remove(index))
     }
 }

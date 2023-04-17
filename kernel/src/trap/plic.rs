@@ -35,6 +35,16 @@ pub fn add_user(device_id: u16, pid: usize, handler_ptr: usize) {
     handlers[device_id as usize].1 = Some((pid, handler_ptr, device_id as _));
 }
 
+pub fn try_remove_user(pid: usize) -> Option<()> {
+    let handlers = &mut INTERRUPT_HANDLERS.lock();
+    let device_id = handlers
+        .iter()
+        .position(|(_, user)| user.map(|(p, _, _)| p == pid).unwrap_or(false))?;
+    assert!(handlers[device_id].0.is_none());
+    handlers[device_id].1 = None;
+    Some(())
+}
+
 pub fn handle_interrupt() {
     let mut unlocked_handler = None;
 
@@ -100,8 +110,9 @@ pub fn set_global_threshold(threshold: u8) {
 
 /// Set the enable bit for the given interrupt ID on context 1
 fn enable_device(interrupt_id: u16) {
-    let id: u32 = 1 << interrupt_id;
-    Registers::SupervisorEnable.write(id);
+    let prev_enable = Registers::SupervisorEnable.read();
+    let new_enable: u32 = prev_enable | (1 << interrupt_id);
+    Registers::SupervisorEnable.write(new_enable);
 }
 
 /// Claim the next interrupt for context 1

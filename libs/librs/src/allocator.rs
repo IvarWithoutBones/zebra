@@ -1,5 +1,5 @@
-use core::alloc::{GlobalAlloc, Layout};
 use crate::syscall;
+use core::alloc::{GlobalAlloc, Layout};
 
 struct Allocator;
 

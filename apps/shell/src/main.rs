@@ -81,8 +81,9 @@ fn main() {
     syscall::spawn(elfs::LOG, false);
     syscall::sleep(SLEEP_DURATION); // Dont print before the log server is set up
 
-    // syscall::spawn(elfs::USTAR, true);
-    syscall::spawn(elfs::VIRTIO, true);
+    syscall::spawn(elfs::VIRTIO, false);
+    syscall::sleep(SLEEP_DURATION);
+    syscall::spawn(elfs::USTAR, true);
 
     println!("welcome to knockoff bash");
     print_prefix();

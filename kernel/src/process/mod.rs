@@ -1,7 +1,7 @@
+pub mod interrupt;
 pub mod scheduler;
 pub mod syscall;
 pub mod trapframe;
-pub mod interrupt;
 
 use self::trapframe::TrapFrame;
 use crate::{

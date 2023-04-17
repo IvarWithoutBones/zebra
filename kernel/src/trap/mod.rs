@@ -19,16 +19,13 @@ pub unsafe fn attach_supervisor_trap_vector() {
     asm!("csrw stvec, {}", in(reg) supervisor_trap_vector as usize);
 }
 
-#[cfg(not(test))]
-pub unsafe fn enable_interrupts() {
-    println!("enabling interrupts...");
-
-    // Set the interrupt enable bit
-    asm!("csrs sstatus, {}", in(reg) 1 << 1);
-    // Enable external, timer, and software interrupts
-    asm!("csrs sie, {}", in(reg) 1 << 9 | 1 << 5 | 1 << 1);
-
-    println!("interrupts enabled");
+pub fn enable_interrupts() {
+    unsafe {
+        // Set the interrupt enable bit
+        asm!("csrs sstatus, {}", in(reg) 1 << 1);
+        // Enable external, timer, and software interrupts
+        asm!("csrs sie, {}", in(reg) 1 << 9 | 1 << 5 | 1 << 1);
+    }
 }
 
 #[allow(clippy::enum_variant_names)] // Just matching the spec
@@ -53,9 +50,7 @@ impl From<usize> for Interrupt {
 impl Interrupt {
     fn handle(&self) {
         match self {
-            Self::SupervisorExternal => {
-                plic::handle_interrupt()
-            }
+            Self::SupervisorExternal => plic::handle_interrupt(),
 
             Self::SupervisorSoftware => {
                 // Clear the interrupt pending bit
@@ -119,23 +114,19 @@ impl Exception {
             value
         };
 
-        if stval != 0 {
-            let sepc = unsafe {
-                let value: usize;
-                asm!("csrr {}, sepc", lateout(reg) value);
-                value
-            };
+        let sepc = unsafe {
+            let value: usize;
+            asm!("csrr {}, sepc", lateout(reg) value);
+            value
+        };
 
-            if let Some(paddr) = page::root_table().physical_addr(sepc) {
-                panic!(
+        if let Some(paddr) = page::root_table().physical_addr(sepc) {
+            panic!(
                     "unhandled exception: {self:?}, stval={stval:#x}, physical address={paddr:#x}, sstatus={sstatus:#x}",
                 );
-            } else {
-                panic!("unhandled exception: {self:?}, stval={stval:#x}, sstatus={sstatus:#x}");
-            }
+        } else {
+            panic!("unhandled exception: {self:?}, stval={stval:#x}, sstatus={sstatus:#x}");
         }
-
-        panic!("unhandled exception: {self:?}, sstatus={sstatus:#x}");
     }
 }
 
@@ -217,9 +208,7 @@ extern "C" fn supervisor_trap_handler(cause: usize) {
 
     Trap::from(cause).handle();
 
-    unsafe {
-        asm!("csrs sie, {}", in(reg) 1 << 9 | 1 << 5 | 1 << 1);
-    };
+    enable_interrupts();
 }
 
 #[no_mangle]

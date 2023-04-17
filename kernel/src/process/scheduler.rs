@@ -1,5 +1,9 @@
 use super::{Process, ProcessState};
-use crate::{ipc, spinlock::SpinLock, trap::clint};
+use crate::{
+    ipc,
+    spinlock::SpinLock,
+    trap::{clint, plic},
+};
 use alloc::collections::VecDeque;
 use core::arch::asm;
 
@@ -32,6 +36,8 @@ impl ProcessList {
             })
             .map(|p| p.state = ProcessState::Ready)
             .unwrap_or(());
+
+        plic::try_remove_user(proc.pid);
 
         Some(proc)
     }
@@ -101,6 +107,15 @@ pub fn schedule() -> ! {
                                     server.process_id
                                 );
                             }
+                        } else {
+                            println!(
+                                "server {receiver_sid} dropped a message from {}!",
+                                next_proc.pid
+                            );
+
+                            next_proc.state = ProcessState::Ready;
+                            found = true;
+                            break;
                         }
                     }
 

@@ -156,9 +156,13 @@ pub fn handle() {
                 if let Some(server) = server_list.get_by_sid(server_id) {
                     server.send_message(Message::new(proc.pid, curr_sid, identifier, data));
 
-                    proc.state = ProcessState::MessageSent {
-                        receiver_sid: server.server_id,
-                    };
+                    if let ProcessState::HandlingInterrupt { .. } = proc.state {
+                        // Do nothing, this needs to be asynchronous
+                    } else {
+                        proc.state = ProcessState::MessageSent {
+                            receiver_sid: server.server_id,
+                        };
+                    }
 
                     if let Some(proc) = procs.find_by_pid(server.process_id) {
                         if proc.state == ProcessState::WaitUntilMessageReceived {

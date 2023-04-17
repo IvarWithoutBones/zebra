@@ -11,6 +11,14 @@ pub mod mutex;
 pub mod syscall;
 pub mod test;
 
+use core::arch::asm;
+
+pub fn memory_sync() {
+    unsafe {
+        asm!("fence");
+    }
+}
+
 extern "C" {
     fn __zebra_main();
 }

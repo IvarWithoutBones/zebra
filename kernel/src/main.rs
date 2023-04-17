@@ -36,7 +36,11 @@ extern "C" fn kernel_main() {
 
         // No needs for interrupts in non-integration tests
         #[cfg(not(test))]
-        trap::enable_interrupts();
+        {
+            println!("enabling interrupts...");
+            trap::enable_interrupts();
+            println!("interrupts enabled");
+        }
     }
 
     // Start executing the reexported test harness's entry point.
