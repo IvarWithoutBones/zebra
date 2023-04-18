@@ -29,8 +29,8 @@ impl Request {
 impl From<ipc::Message> for Request {
     fn from(msg: ipc::Message) -> Request {
         match msg.identifier {
-            2 => Request::Read,
             1 => Request::Write { data: msg.data },
+            2 => Request::Read,
             _ => Request::Unknown { id: msg.identifier },
         }
     }

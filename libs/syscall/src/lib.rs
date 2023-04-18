@@ -27,6 +27,7 @@ pub enum SystemCall {
     RegisterInterruptHandler = 11,
     CompleteInterrupt = 12,
     Yield = 13,
+    TransferMemory = 14,
 
     // TODO: Remove these
     Spawn = 7,

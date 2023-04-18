@@ -161,30 +161,22 @@ fn main() {
         .unwrap();
     println!("[ustar] capacity: {:#x}", capacity_reply.data[0]);
 
-    let mut buf = alloc::vec![0; capacity_reply.data[0] as usize];
-    for sector in 0..(capacity_reply.data[0] / 512) {
-        let reply = librs::ipc::MessageBuilder::new(123)
-            .with_identifier(1)
-            .with_data(sector.into())
-            .build()
-            .send_receive()
-            .unwrap();
+    let reply = librs::ipc::MessageBuilder::new(123)
+        .with_identifier(1)
+        .build()
+        .send_receive()
+        .unwrap();
 
-        let contents = {
-            // TODO: shared memory
-            let aligned = reply.data[0] & !0xfff;
-            librs::syscall::identity_map(aligned..=aligned + 0x1000);
+    println!("[ustar] got reply: {:#?}", reply);
+    assert_eq!(reply.identifier, 5);
 
-            unsafe { core::slice::from_raw_parts_mut(reply.data[0] as *mut u8, 512) }
-        };
+    let contents =
+        unsafe { core::slice::from_raw_parts(reply.data[0] as *mut u8, reply.data[1] as usize) };
 
-        buf[sector as usize * 512..(sector as usize + 1) * 512].copy_from_slice(contents);
-        println!("[ustar] got sector {:#x}", sector);
-    }
+    let tarball = TarBall::new(contents);
+    println!("\ndisk contents: {:#?}\n", tarball);
 
-    let tarball = TarBall::new(&buf);
-    println!("{:#?}\n", tarball);
-
+    println!("[ustar] spawning hello from disk image");
     let bin = &tarball["./target/riscv64gc-unknown-none-elf/debug/hello"].content;
     librs::syscall::spawn(bin, true);
 }

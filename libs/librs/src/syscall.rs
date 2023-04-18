@@ -209,3 +209,19 @@ pub fn complete_interrupt() -> ! {
         );
     }
 }
+
+/// Transfer the given range of memory to the given server. The memory will be unmapped from the current process.
+pub fn transfer_memory(to_sid: u64, range: RangeInclusive<u64>) {
+    let start = *range.start();
+    let end = *range.end();
+
+    unsafe {
+        asm!("ecall",
+            in("a0") to_sid,
+            in("a1") start,
+            in("a2") end,
+            in("a7") SystemCall::TransferMemory as usize,
+            options(nomem, nostack)
+        );
+    }
+}

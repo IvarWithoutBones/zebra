@@ -237,6 +237,38 @@ pub fn handle() {
                     println!("process {pid} tried to complete an interrupt without being in an interrupt handler. Killing process");
                 }
             }
+
+            SystemCall::TransferMemory => {
+                let sid = proc.trap_frame.registers[Registers::A0 as usize];
+                let start = proc.trap_frame.registers[Registers::A1 as usize] as usize;
+                let end = proc.trap_frame.registers[Registers::A2 as usize] as usize;
+
+                if !memory::is_page_aligned(start) || !memory::is_page_aligned(end) {
+                    let pid = procs.remove_current().unwrap().pid;
+                    println!("process {pid} tried to transfer memory that was not page aligned ({start:#x}..={end:#x}). Killing process");
+                    return;
+                }
+
+                let start = proc.page_table.physical_addr(start).unwrap();
+                let end = proc.page_table.physical_addr(end).unwrap();
+
+                for vaddr in (start..end).step_by(memory::PAGE_SIZE) {
+                    proc.page_table.unmap(vaddr);
+                }
+
+                if let Some(server) = ipc::server_list().lock().get_by_sid(sid) {
+                    if let Some(receiver) = procs.find_by_pid(server.process_id) {
+                        receiver.page_table.identity_map(
+                            start,
+                            end,
+                            memory::page::EntryAttributes::UserReadWrite,
+                        );
+                    }
+                } else {
+                    let pid = procs.remove_current().unwrap().pid;
+                    println!("process {pid} tried to transfer memory to a non-existent server {sid}. Killing process");
+                }
+            }
         }
     } else {
         let offender = procs.remove_current().unwrap().pid;

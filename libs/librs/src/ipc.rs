@@ -29,6 +29,15 @@ impl MessageData {
         &self.data
     }
 
+    pub fn as_be_bytes(&self) -> [u8; Self::LEN * size_of::<u64>()] {
+        let mut buf = [0u8; Self::LEN * size_of::<u64>()];
+        self.data.iter().enumerate().for_each(|(i, &data)| {
+            buf[i * size_of::<u64>()..(i + 1) * size_of::<u64>()]
+                .copy_from_slice(&data.to_be_bytes())
+        });
+        buf
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &u64> {
         self.data.iter()
     }

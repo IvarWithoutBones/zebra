@@ -11,6 +11,7 @@ mod block_device;
 mod queue;
 
 use crate::block_device::{BlockDevice, BLOCK_SIZE};
+use alloc::boxed::Box;
 use bitbybit::{bitenum, bitfield};
 use core::{cell::UnsafeCell, fmt, mem::MaybeUninit, ops::RangeInclusive};
 use librs::{ipc, syscall};
@@ -204,19 +205,63 @@ fn main() {
         let msg = ipc::Message::receive_blocking();
         let reply = ipc::MessageBuilder::new(msg.server_id);
 
-        // TODO: actual API
-        if msg.identifier == 1 {
-            // READ
-            let sector = msg.data[0];
-            let content = unsafe { DISK.get_mut().assume_init_mut() }.read(sector);
-            let content_ptr = content.as_ptr() as u64;
-            let data: &[u64] = &[content_ptr, content_ptr + content.len() as u64];
-            reply.with_data(data.into()).send();
-        } else if msg.identifier == 2 {
-            // CAPACITY
-            let capacity =
-                unsafe { DISK.get_mut().assume_init_mut() }.capacity() * BLOCK_SIZE as u64;
-            reply.with_data(capacity.into()).send();
+        // TODO: create an actual API
+        const READ_DISK: u64 = 1;
+        const DISK_SIZE: u64 = 2;
+        const DATA_READY: u64 = 5;
+        const REQUEST_UNKNOWN: u64 = u64::MAX;
+
+        match msg.identifier {
+            READ_DISK => {
+                let disk = unsafe { DISK.get_mut().assume_init_mut() };
+                let capacity = disk.capacity();
+
+                // Align the buffer to a page so that it can be mapped into the receivers address space
+                let size = capacity * BLOCK_SIZE as u64;
+                let aligned_size = {
+                    let remainder = size % 0x1000; // Page size
+                    if remainder == 0 {
+                        size
+                    } else {
+                        (size + 0x1000) - remainder
+                    }
+                };
+
+                let mut buffer = alloc::vec![0u8; aligned_size as usize];
+
+                // Read out every sector of the block device
+                for sector in 0..capacity {
+                    println!("[virtio] reading sector {sector}");
+                    let contents = disk.read(sector);
+                    buffer[sector as usize * BLOCK_SIZE..(sector as usize + 1) * BLOCK_SIZE]
+                        .copy_from_slice(&contents);
+                }
+
+                // Transfer the buffer to the receiver, we cannot access it afterwards
+                let buf_ptr = Box::into_raw(buffer.into_boxed_slice()) as *mut u8;
+                println!("[virtio] transferring memory {buf_ptr:#p}");
+                librs::syscall::transfer_memory(
+                    msg.server_id,
+                    buf_ptr as u64..=buf_ptr as u64 + aligned_size,
+                );
+
+                // Let the receiver know that the data is ready and where its located
+                let reply_data: &[u64] = &[buf_ptr as u64, size];
+                reply
+                    .with_identifier(DATA_READY)
+                    .with_data(reply_data.into())
+                    .send();
+            }
+
+            DISK_SIZE => {
+                let capacity =
+                    unsafe { DISK.get_mut().assume_init_mut() }.capacity() * BLOCK_SIZE as u64;
+                reply.with_data(capacity.into()).send();
+            }
+
+            _ => {
+                reply.with_identifier(REQUEST_UNKNOWN).send();
+            }
         }
     }
 }
