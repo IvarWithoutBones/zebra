@@ -155,6 +155,7 @@ version = "0.1.0"
 dependencies = [
  "binrw",
  "librs",
+ "virtio",
 ]
 
 [[package]]

@@ -9,3 +9,6 @@ default-features = false
 
 [dependencies.librs]
 path = "../../libs/librs"
+
+[dependencies.virtio]
+path = "../virtio"

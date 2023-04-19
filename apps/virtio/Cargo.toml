@@ -3,6 +3,9 @@ name = "virtio"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+path = "src/lib.rs"
+
 [dependencies]
 bitbybit = "1.1.2"
 

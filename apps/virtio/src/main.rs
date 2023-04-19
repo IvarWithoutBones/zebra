@@ -205,14 +205,17 @@ fn main() {
         let msg = ipc::Message::receive_blocking();
         let reply = ipc::MessageBuilder::new(msg.server_id);
 
-        // TODO: create an actual API
-        const READ_DISK: u64 = 1;
-        const DISK_SIZE: u64 = 2;
-        const DATA_READY: u64 = 5;
-        const REQUEST_UNKNOWN: u64 = u64::MAX;
+        match virtio::Request::from(&msg) {
+            virtio::Request::DiskSize => {
+                let capacity =
+                    unsafe { DISK.get_mut().assume_init_mut() }.capacity() * BLOCK_SIZE as u64;
+                reply
+                    .with_identifier(virtio::Reply::DiskSize as _)
+                    .with_data(capacity.into())
+                    .send();
+            }
 
-        match msg.identifier {
-            READ_DISK => {
+            virtio::Request::ReadDisk => {
                 let disk = unsafe { DISK.get_mut().assume_init_mut() };
                 let capacity = disk.capacity();
 
@@ -232,7 +235,7 @@ fn main() {
                 // Read out every sector of the block device
                 for sector in 0..capacity {
                     println!("[virtio] reading sector {sector}");
-                    let contents = disk.read(sector);
+                    let contents = disk.read_sector(sector);
                     buffer[sector as usize * BLOCK_SIZE..(sector as usize + 1) * BLOCK_SIZE]
                         .copy_from_slice(&contents);
                 }
@@ -248,19 +251,15 @@ fn main() {
                 // Let the receiver know that the data is ready and where its located
                 let reply_data: &[u64] = &[buf_ptr as u64, size];
                 reply
-                    .with_identifier(DATA_READY)
+                    .with_identifier(virtio::Reply::DataReady as u64)
                     .with_data(reply_data.into())
                     .send();
             }
 
-            DISK_SIZE => {
-                let capacity =
-                    unsafe { DISK.get_mut().assume_init_mut() }.capacity() * BLOCK_SIZE as u64;
-                reply.with_data(capacity.into()).send();
-            }
-
-            _ => {
-                reply.with_identifier(REQUEST_UNKNOWN).send();
+            virtio::Request::UnknownRequest => {
+                reply
+                    .with_identifier(virtio::Request::UnknownRequest as u64)
+                    .send();
             }
         }
     }

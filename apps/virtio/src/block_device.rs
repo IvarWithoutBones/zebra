@@ -258,7 +258,7 @@ impl BlockDevice {
         }
     }
 
-    pub fn read(&mut self, sector: u64) -> [u8; BLOCK_SIZE] {
+    pub fn read_sector(&mut self, sector: u64) -> [u8; BLOCK_SIZE] {
         // TODO: remove, this is a hack because we dont clear the BSS
         self.free.iter_mut().for_each(|f| *f = true);
 

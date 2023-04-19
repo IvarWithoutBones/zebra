@@ -154,29 +154,21 @@ fn main() {
     librs::syscall::register_server(None);
     println!("[ustar] asking for data");
 
-    let capacity_reply = librs::ipc::MessageBuilder::new(123)
-        .with_identifier(2)
-        .build()
-        .send_receive()
-        .unwrap();
-    println!("[ustar] capacity: {:#x}", capacity_reply.data[0]);
+    let size_msg: librs::ipc::Message = virtio::Request::DiskSize.into();
+    let size_reply = size_msg.send_receive().unwrap();
+    assert_eq!(
+        virtio::Reply::from_message(&size_reply),
+        Some(virtio::Reply::DiskSize)
+    );
+    println!("[ustar] capacity: {:#x}", size_reply.data[0]);
 
-    let reply = librs::ipc::MessageBuilder::new(123)
-        .with_identifier(1)
-        .build()
-        .send_receive()
-        .unwrap();
-
-    println!("[ustar] got reply: {:#?}", reply);
-    assert_eq!(reply.identifier, 5);
-
-    let contents =
-        unsafe { core::slice::from_raw_parts(reply.data[0] as *mut u8, reply.data[1] as usize) };
+    let contents_msg: librs::ipc::Message = virtio::Request::ReadDisk.into();
+    let contents_reply = contents_msg.send_receive().unwrap();
+    let contents = unsafe { virtio::reply_as_slice(&contents_reply).unwrap() };
 
     let tarball = TarBall::new(contents);
     println!("\ndisk contents: {:#?}\n", tarball);
 
-    println!("[ustar] spawning hello from disk image");
-    let bin = &tarball["./target/riscv64gc-unknown-none-elf/debug/hello"].content;
-    librs::syscall::spawn(bin, true);
+    let str = core::str::from_utf8(tarball["./libs/syscall/Cargo.toml"].content).unwrap();
+    println!("```\n{str}```");
 }

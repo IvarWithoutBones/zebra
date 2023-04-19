@@ -43,6 +43,12 @@ impl MessageData {
     }
 }
 
+impl Default for MessageData {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
 impl Index<usize> for MessageData {
     type Output = u64;
 
