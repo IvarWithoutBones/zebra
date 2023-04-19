@@ -8,14 +8,30 @@ pub mod print;
 pub mod allocator;
 pub mod ipc;
 pub mod mutex;
+pub mod path;
 pub mod syscall;
 pub mod test;
 
+extern crate alloc;
+
 use core::arch::asm;
 
+pub const PAGE_SIZE: usize = 4096;
+
+#[inline]
 pub fn memory_sync() {
     unsafe {
         asm!("fence");
+    }
+}
+
+#[inline]
+pub fn align_page_up(size: usize) -> usize {
+    let remainder = size % PAGE_SIZE;
+    if remainder == 0 {
+        size
+    } else {
+        (size + PAGE_SIZE) - remainder
     }
 }
 

@@ -3,6 +3,7 @@ use core::alloc::{GlobalAlloc, Layout};
 
 struct Allocator;
 
+// TODO: handle allocations in userspace
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         syscall::allocate(layout.size())

@@ -3,16 +3,13 @@
 #![no_std]
 #![no_main]
 
-librs::main!(main);
-
-use core::ops::Index;
-
-use alloc::{
-    collections::BTreeMap,
-    fmt,
-    string::{String, ToString},
-};
+use alloc::{fmt, vec::Vec};
 use binrw::{binrw, BinRead, BinReaderExt, NullString};
+use core::{ops::Index, str};
+use librs::ipc;
+use ustar::{FileIndex, Reply, Request};
+
+librs::main!(main);
 
 const fn round_to_block(num: u64) -> u64 {
     const BLOCK_SIZE: u64 = 512;
@@ -34,9 +31,7 @@ impl<const LEN: usize> Octal<LEN> {
     const RADIX: u32 = 8;
 
     fn as_str(&self) -> &str {
-        core::str::from_utf8(&self.value)
-            .unwrap()
-            .trim_end_matches('\0')
+        str::from_utf8(&self.value).unwrap().trim_end_matches('\0')
     }
 
     fn as_u64(&self) -> u64 {
@@ -107,52 +102,88 @@ pub struct Header {
 struct File<'a> {
     header: Header,
     content: &'a [u8],
+    index: FileIndex,
 }
 
 impl fmt::Debug for File<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("File")
+            .field("name", &self.header.file_name)
             .field("type", &self.header.type_flag)
-            .field("content", &format_args!("[u8; {:#x}]", self.content.len()))
+            .field("contents", &format_args!("[u8; {:#x}]", self.content.len()))
             .finish_non_exhaustive()
     }
 }
 
 #[derive(Debug)]
 struct TarBall<'a> {
-    files: BTreeMap<String, File<'a>>,
+    files: Vec<File<'a>>,
 }
 
 impl<'a> TarBall<'a> {
     fn new(file: &'a [u8]) -> Self {
-        let mut files = BTreeMap::new();
+        let mut files = Vec::new();
         let mut cursor = binrw::io::Cursor::new(file);
+        let mut index = 0;
 
         while let Ok(header) = cursor.read_le::<Header>() {
             let content_start = round_to_block(cursor.position());
             let content_end = content_start + header.size.as_u64();
-
             let content = &cursor.get_ref()[content_start as usize..content_end as usize];
-            files.insert(header.file_name.to_string(), File { header, content });
 
+            files.push(File {
+                header,
+                content,
+                index,
+            });
+
+            index += 1;
             cursor.set_position(round_to_block(content_end));
         }
 
         Self { files }
     }
+
+    fn children(&self, parent: FileIndex) -> Option<impl Iterator<Item = &File<'a>>> {
+        const ROOT: FileIndex = 0;
+        let is_root = parent == ROOT;
+        let parent = self.files.get(parent)?;
+
+        if !is_root && parent.header.type_flag != TypeFlag::Directory {
+            return None;
+        }
+
+        let to_skip = if is_root { 0 } else { 1 };
+
+        Some(
+            self.files
+                .iter()
+                .filter(|f| f.header.file_name.starts_with(&parent.header.file_name))
+                .skip(to_skip), // Skip the parent
+        )
+    }
+
+    fn get_name(&self, name: &[u8]) -> Option<&File<'_>> {
+        self.files
+            .iter()
+            .find(|f| f.header.file_name.as_slice() == name)
+    }
+
+    fn get_index(&self, index: FileIndex) -> Option<&File<'_>> {
+        self.files.get(index)
+    }
 }
 
-impl<'a> Index<&str> for TarBall<'a> {
+impl<'a> Index<FileIndex> for TarBall<'a> {
     type Output = File<'a>;
 
-    fn index(&self, index: &str) -> &Self::Output {
-        self.files.index(index)
+    fn index(&self, index: FileIndex) -> &Self::Output {
+        &self.files[index]
     }
 }
 
 fn main() {
-    librs::syscall::register_server(None);
-    println!("[ustar] asking for data");
+    librs::syscall::register_server(Some(u64::from_be_bytes(*b"ustar\0\0\0")));
 
     let size_msg: librs::ipc::Message = virtio::Request::DiskSize.into();
     let size_reply = size_msg.send_receive().unwrap();
@@ -160,15 +191,105 @@ fn main() {
         virtio::Reply::from_message(&size_reply),
         Some(virtio::Reply::DiskSize)
     );
-    println!("[ustar] capacity: {:#x}", size_reply.data[0]);
+
+    println!("[ustar] reading disk with size {:#x}", size_reply.data[0]);
 
     let contents_msg: librs::ipc::Message = virtio::Request::ReadDisk.into();
     let contents_reply = contents_msg.send_receive().unwrap();
     let contents = unsafe { virtio::reply_as_slice(&contents_reply).unwrap() };
 
     let tarball = TarBall::new(contents);
-    println!("\ndisk contents: {:#?}\n", tarball);
 
-    let str = core::str::from_utf8(tarball["./libs/syscall/Cargo.toml"].content).unwrap();
-    println!("```\n{str}```");
+    println!("[ustar] server ready");
+
+    loop {
+        let msg = ipc::Message::receive_blocking();
+        let reply = ipc::MessageBuilder::new(msg.server_id);
+
+        match Request::from(&msg) {
+            Request::ListFiles => {
+                let parent = msg.data[0] as usize;
+
+                if let Some(children) = tarball.children(parent).map(|c| c.collect::<Vec<_>>()) {
+                    let length = children.chunks(ipc::MessageData::LEN).count() as u64;
+                    reply
+                        .with_identifier(Reply::ReplyCount.into())
+                        .with_data(length.into())
+                        .send();
+
+                    for chunk in children.chunks(ipc::MessageData::LEN) {
+                        let mut data = [Reply::NoChildren.into(); ipc::MessageData::LEN];
+                        for (i, child) in chunk.iter().enumerate() {
+                            data[i] = child.index as u64;
+                        }
+
+                        reply
+                            .with_identifier(Reply::FileIndex.into())
+                            .with_data(data.into())
+                            .send();
+                    }
+                } else {
+                    reply.with_identifier(Reply::NoChildren.into()).send();
+                }
+            }
+
+            Request::FileName => {
+                let index = msg.data[0] as _;
+                if let Some(file) = &tarball.get_index(index) {
+                    let name = file.header.file_name.as_slice();
+                    reply
+                        .with_identifier(Reply::FileName.into())
+                        .with_data(name.into())
+                        .send();
+                } else {
+                    reply.with_identifier(Reply::FileNotFound.into()).send();
+                }
+            }
+
+            Request::FileIndex => {
+                let bytes = msg.data.as_be_bytes();
+                let bytes = bytes.split(|b| *b == 0).next().unwrap_or(&[]);
+
+                if let Some(fid) = tarball.get_name(bytes).map(|f| f.index as u64) {
+                    reply
+                        .with_identifier(Reply::FileIndex.into())
+                        .with_data(fid.into())
+                        .send();
+                } else {
+                    reply.with_identifier(Reply::FileNotFound.into()).send();
+                }
+            }
+
+            Request::FileContents => {
+                let index = msg.data[0] as _;
+                if let Some(file) = &tarball.get_index(index) {
+                    if file.header.type_flag == TypeFlag::Directory {
+                        reply.with_identifier(Reply::IsDirectory.into()).send();
+                    } else {
+                        // Allocate a buffer and copy the file contents into it
+                        let aligned_size = librs::align_page_up(file.content.len());
+                        let mut buffer = alloc::vec![0; aligned_size];
+                        buffer[..file.content.len()].copy_from_slice(file.content);
+                        let buffer_ptr = buffer.as_mut_ptr() as u64;
+
+                        // Transfer the buffer to the client
+                        librs::syscall::transfer_memory(msg.server_id, buffer);
+                        let reply_data: &[u64] = &[buffer_ptr, file.content.len() as u64];
+
+                        reply
+                            .with_identifier(Reply::FileContents.into())
+                            .with_data(reply_data.into())
+                            .send();
+                    }
+                } else {
+                    reply.with_identifier(Reply::FileNotFound.into()).send();
+                }
+            }
+
+            _ => {
+                println!("[ustar] unknown request: {:#x}", msg.identifier);
+                reply.with_identifier(Reply::UnknownRequest.into()).send();
+            }
+        }
+    }
 }

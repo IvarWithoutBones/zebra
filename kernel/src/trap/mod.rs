@@ -19,6 +19,7 @@ pub unsafe fn attach_supervisor_trap_vector() {
     asm!("csrw stvec, {}", in(reg) supervisor_trap_vector as usize);
 }
 
+#[cfg(not(test))]
 pub fn enable_interrupts() {
     unsafe {
         // Set the interrupt enable bit
@@ -203,12 +204,16 @@ extern "C" fn user_trap_handler(cause: usize) {
 #[no_mangle]
 extern "C" fn supervisor_trap_handler(cause: usize) {
     unsafe {
+        // Globally disable interrupts, so that a lock being dropped doesnt renable them
         asm!("csrw sie, zero");
     };
 
     Trap::from(cause).handle();
 
-    enable_interrupts();
+    unsafe {
+        // Enable external, timer, and software interrupts
+        asm!("csrs sie, {}", in(reg) 1 << 9 | 1 << 5 | 1 << 1);
+    }
 }
 
 #[no_mangle]

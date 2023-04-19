@@ -8,3 +8,6 @@ path = "../../libs/librs"
 
 [dependencies.log-server]
 path = "../../apps/log"
+
+[dependencies.ustar]
+path = "../../apps/ustar"

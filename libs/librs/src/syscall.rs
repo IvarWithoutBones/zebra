@@ -1,4 +1,5 @@
 use crate::ipc::MessageData;
+use alloc::vec::Vec;
 use core::{arch::asm, ops::RangeInclusive, time::Duration};
 use syscall::SystemCall;
 
@@ -211,9 +212,15 @@ pub fn complete_interrupt() -> ! {
 }
 
 /// Transfer the given range of memory to the given server. The memory will be unmapped from the current process.
-pub fn transfer_memory(to_sid: u64, range: RangeInclusive<u64>) {
-    let start = *range.start();
-    let end = *range.end();
+pub fn transfer_memory(to_sid: u64, buffer: Vec<u8>) {
+    let aligned_size = super::align_page_up(buffer.len());
+    assert!(aligned_size >= buffer.capacity());
+
+    // The process this is mapped into is responsible for deallocation.
+    let slice = Vec::leak(buffer);
+
+    let start = slice.as_ptr();
+    let end = unsafe { start.add(slice.len()) };
 
     unsafe {
         asm!("ecall",

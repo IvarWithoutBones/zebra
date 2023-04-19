@@ -30,16 +30,17 @@ pub fn handle() {
 
             SystemCall::Allocate => {
                 let size = proc.trap_frame.registers[Registers::A0 as usize] as usize;
+                let ptr = memory::allocator().allocate(size);
 
-                if let Some(result) = memory::allocator().allocate(size) {
+                if let Some(ptr) = ptr {
                     let allocated_size = memory::align_page_up(size);
                     proc.page_table.identity_map(
-                        result as usize,
-                        result as usize + allocated_size,
+                        ptr as usize,
+                        ptr as usize + allocated_size,
                         memory::page::EntryAttributes::UserReadWrite,
                     );
 
-                    proc.trap_frame.registers[Registers::A0 as usize] = result as _;
+                    proc.trap_frame.registers[Registers::A0 as usize] = ptr as _;
                 } else {
                     let pid = procs.remove_current().unwrap().pid;
                     println!("failed to allocate memory for process {pid} with size {size:#x}. Killing process");

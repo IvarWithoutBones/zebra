@@ -88,12 +88,19 @@ impl From<&[u8]> for MessageData {
         let mut result = Self::DEFAULT;
         data.chunks(size_of::<u64>())
             .enumerate()
+            .take(Self::LEN)
             .for_each(|(i, chunk)| {
                 let mut buf = [0; size_of::<u64>()];
                 buf[..chunk.len()].copy_from_slice(chunk);
                 result.data[i] = u64::from_be_bytes(buf);
             });
         result
+    }
+}
+
+impl From<&str> for MessageData {
+    fn from(value: &str) -> Self {
+        Self::from(value.as_bytes())
     }
 }
 
@@ -143,7 +150,7 @@ impl Message {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct MessageBuilder {
     server_id: u64,
     identifier: u64,

@@ -115,6 +115,7 @@ version = "0.1.0"
 dependencies = [
  "librs",
  "log-server",
+ "ustar",
 ]
 
 [[package]]
@@ -154,6 +155,7 @@ name = "ustar"
 version = "0.1.0"
 dependencies = [
  "binrw",
+ "bitbybit",
  "librs",
  "virtio",
 ]

@@ -63,11 +63,69 @@ fn handle_command(line: &str) {
             println!("{args}");
         }
 
-        // Not to pat myself on the back too much but modern shells can learn a thing or two from this
-        "uname" => println!("Zebra"),
-        "ls" => println!("Downloads Documents Pictures Music Videos foo.sh"),
-        "./foo.sh" => println!("hello world"),
-        "cat foo.sh" => println!("#!/usr/bin/bash\necho hello world"),
+        "spawn" => {
+            let (path, file) = if let Some(path) = iter.next() {
+                let maybe_file = ustar::read_file_from_path(path);
+                if let Ok(file) = maybe_file {
+                    (path, file)
+                } else {
+                    println!("error reading {path:#?}: {maybe_file:?}");
+                    return;
+                }
+            } else {
+                println!("usage: spawn <file>");
+                return;
+            };
+
+            println!("spawning {path:?}");
+            syscall::spawn(&file, true);
+        }
+
+        "cat" => {
+            let file = if let Some(path) = iter.next() {
+                let maybe_file = ustar::read_file_from_path(path);
+                if let Ok(contents) = maybe_file {
+                    contents
+                } else {
+                    println!("error reading {path:#?}: {maybe_file:?}");
+                    return;
+                }
+            } else {
+                println!("usage: cat <file>");
+                return;
+            };
+
+            let str = core::str::from_utf8(&file).unwrap();
+            print!("{str}");
+        }
+
+        "ls" => {
+            let dir = if let Some(dir) = iter.next() {
+                let maybe_dir = ustar::file_index_of(dir);
+                if let Ok(index) = maybe_dir {
+                    index
+                } else {
+                    println!("error reading {dir:#?}: {maybe_dir:?}");
+                    return;
+                }
+            } else {
+                0
+            };
+
+            let maybe_children = ustar::children(dir);
+            if let Ok(children) = maybe_children {
+                for child in children {
+                    let maybe_name = ustar::file_name(child);
+                    if let Ok(name) = maybe_name {
+                        println!("{name}");
+                    } else {
+                        println!("error reading name of {child:#?}: {maybe_name:?}");
+                    }
+                }
+            } else {
+                println!("error reading children of FID {dir:#?}: {maybe_children:?}");
+            }
+        }
 
         "" => {}
         _ => println!("unknown command: {line}"),
@@ -83,7 +141,7 @@ fn main() {
 
     syscall::spawn(elfs::VIRTIO, false);
     syscall::sleep(SLEEP_DURATION);
-    syscall::spawn(elfs::USTAR, true);
+    syscall::spawn(elfs::USTAR, false);
 
     println!("welcome to knockoff bash");
     print_prefix();

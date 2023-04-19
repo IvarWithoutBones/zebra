@@ -11,7 +11,6 @@ mod block_device;
 mod queue;
 
 use crate::block_device::{BlockDevice, BLOCK_SIZE};
-use alloc::boxed::Box;
 use bitbybit::{bitenum, bitfield};
 use core::{cell::UnsafeCell, fmt, mem::MaybeUninit, ops::RangeInclusive};
 use librs::{ipc, syscall};
@@ -221,15 +220,7 @@ fn main() {
 
                 // Align the buffer to a page so that it can be mapped into the receivers address space
                 let size = capacity * BLOCK_SIZE as u64;
-                let aligned_size = {
-                    let remainder = size % 0x1000; // Page size
-                    if remainder == 0 {
-                        size
-                    } else {
-                        (size + 0x1000) - remainder
-                    }
-                };
-
+                let aligned_size = librs::align_page_up(size as _) as u64;
                 let mut buffer = alloc::vec![0u8; aligned_size as usize];
 
                 // Read out every sector of the block device
@@ -241,12 +232,9 @@ fn main() {
                 }
 
                 // Transfer the buffer to the receiver, we cannot access it afterwards
-                let buf_ptr = Box::into_raw(buffer.into_boxed_slice()) as *mut u8;
+                let buf_ptr = buffer.as_mut_ptr();
                 println!("[virtio] transferring memory {buf_ptr:#p}");
-                librs::syscall::transfer_memory(
-                    msg.server_id,
-                    buf_ptr as u64..=buf_ptr as u64 + aligned_size,
-                );
+                librs::syscall::transfer_memory(msg.server_id, buffer);
 
                 // Let the receiver know that the data is ready and where its located
                 let reply_data: &[u64] = &[buf_ptr as u64, size];
