@@ -231,13 +231,14 @@ fn main() {
                         .copy_from_slice(&contents);
                 }
 
+                let buf_ptr = buffer.as_ptr() as u64;
+                let reply_data: &[u64] = &[buf_ptr, size];
+                println!("[virtio] transferring buffer at {buf_ptr:#x}");
+
                 // Transfer the buffer to the receiver, we cannot access it afterwards
-                let buf_ptr = buffer.as_mut_ptr();
-                println!("[virtio] transferring memory {buf_ptr:#p}");
                 librs::syscall::transfer_memory(msg.server_id, buffer);
 
-                // Let the receiver know that the data is ready and where its located
-                let reply_data: &[u64] = &[buf_ptr as u64, size];
+                // Let the receiver know that the data is ready, and it can be found
                 reply
                     .with_identifier(virtio::Reply::DataReady as u64)
                     .with_data(reply_data.into())

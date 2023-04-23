@@ -104,7 +104,7 @@ impl From<&str> for MessageData {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Message {
     pub server_id: u64,
     pub identifier: u64,
@@ -133,13 +133,8 @@ impl Message {
     }
 
     pub fn receive_blocking() -> Message {
-        loop {
-            if let Some(msg) = Self::receive() {
-                return msg;
-            } else {
-                syscall::wait_until_message_received();
-            }
-        }
+        syscall::wait_until_message_received();
+        Self::receive().unwrap()
     }
 
     pub fn send_receive(self) -> Option<Message> {

@@ -165,7 +165,7 @@ pub fn handle() {
                         };
                     }
 
-                    if let Some(proc) = procs.find_by_pid(server.process_id) {
+                    if let Some(proc) = procs.find_pid(server.process_id) {
                         if proc.state == ProcessState::WaitUntilMessageReceived {
                             proc.state = ProcessState::Ready;
                         }
@@ -186,7 +186,7 @@ pub fn handle() {
                     proc.trap_frame.registers[Registers::A2 as usize..=Registers::A6 as usize]
                         .copy_from_slice(msg.data.as_slice());
 
-                    let mut sender = procs.find_by_pid(msg.sender_pid).unwrap();
+                    let mut sender = procs.find_pid(msg.sender_pid).unwrap();
                     if let ProcessState::MessageSent { receiver_sid } = sender.state {
                         if receiver_sid == server.server_id {
                             sender.state = ProcessState::Ready;
@@ -258,7 +258,7 @@ pub fn handle() {
                 }
 
                 if let Some(server) = ipc::server_list().lock().get_by_sid(sid) {
-                    if let Some(receiver) = procs.find_by_pid(server.process_id) {
+                    if let Some(receiver) = procs.find_pid(server.process_id) {
                         receiver.page_table.identity_map(
                             start,
                             end,

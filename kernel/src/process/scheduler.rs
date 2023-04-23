@@ -10,7 +10,7 @@ use core::arch::asm;
 pub static PROCESSES: SpinLock<ProcessList> = SpinLock::new(ProcessList::new());
 
 pub struct ProcessList {
-    pub processes: VecDeque<Process>,
+    processes: VecDeque<Process>,
 }
 
 impl ProcessList {
@@ -20,8 +20,27 @@ impl ProcessList {
         }
     }
 
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.processes.len()
+    }
+
+    #[inline]
+    pub fn rotate_right(&mut self, amount: usize) {
+        self.processes.rotate_right(amount);
+    }
+
     pub fn push(&mut self, process: Process) {
         self.processes.push_back(process);
+    }
+
+    pub fn next(&mut self) -> Option<&mut Process> {
+        self.processes.rotate_right(1);
+        self.current()
+    }
+
+    pub fn current(&mut self) -> Option<&mut Process> {
+        self.processes.front_mut()
     }
 
     pub fn remove_current(&mut self) -> Option<Process> {
@@ -42,17 +61,16 @@ impl ProcessList {
         Some(proc)
     }
 
-    pub fn next(&mut self) -> Option<&mut Process> {
-        self.processes.rotate_right(1);
-        self.processes.front_mut()
-    }
-
-    pub fn current(&mut self) -> Option<&mut Process> {
-        self.processes.front_mut()
-    }
-
-    pub fn find_by_pid(&mut self, pid: usize) -> Option<&mut Process> {
+    pub fn find_pid(&mut self, pid: usize) -> Option<&mut Process> {
         self.processes.iter_mut().find(|p| p.pid == pid)
+    }
+
+    pub fn find_pid_position(&mut self, pid: usize) -> Option<usize> {
+        self.processes
+            .iter_mut()
+            .enumerate()
+            .find(|(_pos, proc)| proc.pid == pid)
+            .map(|(pos, _proc)| pos)
     }
 }
 
@@ -97,7 +115,7 @@ pub fn schedule() -> ! {
                         });
 
                         if server.has_messages() {
-                            if let Some(server_proc) = procs.find_by_pid(server.process_id) {
+                            if let Some(server_proc) = procs.find_pid(server.process_id) {
                                 if let ProcessState::WaitUntilMessageReceived = server_proc.state {
                                     server_proc.state = ProcessState::Ready;
                                 }

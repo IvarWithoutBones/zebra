@@ -7,13 +7,17 @@ use alloc::boxed::Box;
 pub fn handle(interrupt_id: u32, handler_ptr: usize, pid: usize) {
     let proc = scheduler::PROCESSES.lock_with(|procs| {
         // Update the state of the previously running process
-        if let Some(curr) = procs.processes.front_mut() {
+        if let Some(curr) = procs.current() {
             if curr.state == ProcessState::Running {
                 curr.state = ProcessState::Ready;
             }
         }
 
-        let proc = procs.find_by_pid(pid).unwrap();
+        // Reorder the process list so that `procs.current()` remains valid
+        let pos = procs.find_pid_position(pid).unwrap();
+        procs.rotate_right(procs.len() - pos);
+
+        let proc = procs.current().unwrap();
         let old_state = Box::new(proc.state.clone());
         let old_registers = Box::new(proc.trap_frame.registers);
 
