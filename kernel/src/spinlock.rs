@@ -24,11 +24,6 @@ impl<T> SpinLock<T> {
     }
 
     pub fn lock(&self) -> SpinLockGuard<T> {
-        // Disable interrupts
-        unsafe {
-            asm!("csrc sstatus, {}", in(reg) 1 << 1);
-        }
-
         while self
             .locked
             .compare_exchange(false, true, Ordering::Acquire, Ordering::SeqCst)
@@ -37,7 +32,18 @@ impl<T> SpinLock<T> {
             spin_loop();
         }
 
-        SpinLockGuard { lock: self }
+        let interrupts_enabled_before = {
+            let sstatus: u64;
+            unsafe {
+                asm!("csrr {}, sstatus", out(reg) sstatus);
+            }
+            sstatus & (1 << 1) != 0
+        };
+
+        SpinLockGuard {
+            lock: self,
+            interrupts_enabled_before,
+        }
     }
 
     pub fn lock_with<F, R>(&self, f: F) -> R
@@ -51,6 +57,7 @@ impl<T> SpinLock<T> {
 
 pub struct SpinLockGuard<'a, T> {
     lock: &'a SpinLock<T>,
+    interrupts_enabled_before: bool,
 }
 
 impl<'a, T> Deref for SpinLockGuard<'a, T> {
@@ -71,9 +78,8 @@ impl<'a, T> Drop for SpinLockGuard<'a, T> {
     fn drop(&mut self) {
         self.lock.locked.store(false, Ordering::Release);
 
-        // Enable interrupts
         unsafe {
-            asm!("csrs sstatus, {}", in(reg) 1 << 1);
+            asm!("csrs sstatus, {}", in(reg) (self.interrupts_enabled_before as u64) << 1);
         }
     }
 }
