@@ -1,7 +1,7 @@
 pub const BLOCK_SIZE: usize = 512;
 
 use crate::{
-    queue::{DescriptorFlags, Queue, QUEUE_SIZE},
+    queue::{DescriptorFlags, Queue, QUEUE_LEN},
     DeviceRegister, DeviceStatus,
 };
 use alloc::{boxed::Box, fmt};
@@ -174,9 +174,9 @@ impl Info {
 pub struct BlockDevice {
     queue: Pin<Box<Queue>>,
     device_ptr: *mut u32,
-    free: [bool; QUEUE_SIZE],
-    info: Pin<Box<[Info; QUEUE_SIZE]>>, // NOTE: this must be heap allocated as that give us an physical address
-    requests: Pin<Box<[Request; QUEUE_SIZE]>>,
+    free: [bool; QUEUE_LEN],
+    info: Pin<Box<[Info; QUEUE_LEN]>>, // NOTE: this must be heap allocated as that give us an physical address
+    requests: Pin<Box<[Request; QUEUE_LEN]>>,
     used_index: u16,
 }
 
@@ -197,8 +197,7 @@ impl BlockDevice {
 
         // 4. Read device feature bits, and write the subset of feature bits understood by the OS and driver to the device.
         //    During this step the driver MAY read (but MUST NOT write) the device-specific configuration fields to check that it can support the device before accepting it.
-        let host_features: FeatureFlags =
-            DeviceRegister::DeviceFeatures.read(device_ptr).into();
+        let host_features: FeatureFlags = DeviceRegister::DeviceFeatures.read(device_ptr).into();
         let accepted_features = host_features
             .with_read_only(false)
             .with_config_wce(false)
@@ -224,8 +223,8 @@ impl BlockDevice {
         // Set the queue selector and size
         DeviceRegister::QueueSelector.write(device_ptr, 0);
         let queue_num_max = DeviceRegister::QueueNumberMax.read(device_ptr);
-        assert!(queue_num_max >= QUEUE_SIZE as _);
-        DeviceRegister::QueueNumber.write(device_ptr, QUEUE_SIZE as _);
+        assert!(queue_num_max >= QUEUE_LEN as _);
+        DeviceRegister::QueueNumber.write(device_ptr, QUEUE_LEN as _);
 
         // Tell the device about our queue
         let queue = Queue::new();
@@ -248,22 +247,22 @@ impl BlockDevice {
         status = status.with_driver_ok(true);
         DeviceRegister::Status.write(device_ptr, status.raw_value());
 
-        BlockDevice {
+        let mut res = BlockDevice {
             queue,
             device_ptr,
             used_index: 0,
-            free: [true; QUEUE_SIZE],
-            info: Box::pin([Info::new(); QUEUE_SIZE]),
-            requests: Box::pin([Request::default(); QUEUE_SIZE]),
-        }
+            free: [true; QUEUE_LEN],
+            info: Box::pin([Info::new(); QUEUE_LEN]),
+            requests: Box::pin([Request::default(); QUEUE_LEN]),
+        };
+
+        // TODO: remove, this is a hack because we dont clear the BSS
+        res.free.iter_mut().for_each(|f| *f = true);
+
+        res
     }
 
-    pub fn read_sector(&mut self, sector: u64) -> [u8; BLOCK_SIZE] {
-        // TODO: remove, this is a hack because we dont clear the BSS
-        self.free.iter_mut().for_each(|f| *f = true);
-
-        let buffer = syscall::allocate(BLOCK_SIZE);
-
+    pub unsafe fn read_sector(&mut self, sector: u64, buffer: *mut u8) {
         let (desc_0, desc_1, desc_2) = {
             (
                 self.allocate_descriptor().unwrap(),
@@ -292,17 +291,17 @@ impl BlockDevice {
 
         // The device will write zero  to this upon succesfull completion
         self.info[desc_0].status = u8::MAX;
-        let status_ptr: *mut u8 = &self.info[desc_0].status as *const _ as _;
+        let status_ptr = &self.info[desc_0].status as *const _ as _;
 
-        self.queue.descriptors[desc_2].addr = status_ptr as _;
+        self.queue.descriptors[desc_2].addr = status_ptr;
         self.queue.descriptors[desc_2].len = 1;
         self.queue.descriptors[desc_2].flags = DescriptorFlags::new().with_write(true).raw_value();
         self.queue.descriptors[desc_2].next = 0;
 
         self.info[desc_0].writing = true;
-        self.info[desc_0].data = Some(buffer as *mut u8 as _);
+        self.info[desc_0].data = Some(buffer as _);
 
-        let index = self.queue.available.index as usize % QUEUE_SIZE;
+        let index = self.queue.available.index as usize % QUEUE_LEN;
         self.queue.available.ring[index] = desc_0 as _;
 
         librs::memory_sync();
@@ -319,10 +318,6 @@ impl BlockDevice {
         }
 
         self.free_descriptor_chain(desc_0);
-
-        unsafe { core::slice::from_raw_parts(buffer as *mut u8, BLOCK_SIZE) }
-            .try_into()
-            .unwrap()
     }
 
     pub fn interrupt(&mut self) {
@@ -333,18 +328,19 @@ impl BlockDevice {
 
         // Check if the device has finished a request
         while self.used_index != self.queue.used.index {
-            librs::memory_sync();
-            let id = self.queue.used.ring[self.used_index as usize % QUEUE_SIZE].id as usize;
+            let info = {
+                let id = self.queue.used.ring[self.used_index as usize % QUEUE_LEN].id as usize;
+                &mut self.info[id]
+            };
 
-            if self.info[id].status != 0 {
-                panic!(
-                    "virtio: request failed with status {:#x}",
-                    self.info[id].status
-                );
+            if info.status != 0 {
+                let status = info.status;
+                panic!("virtio: request failed with status {status:#x}");
             }
 
-            self.info[id].writing = false;
+            info.writing = false;
             self.used_index += 1;
+            librs::memory_sync();
         }
     }
 
@@ -356,7 +352,7 @@ impl BlockDevice {
     }
 
     fn free_descriptor(&mut self, index: usize) {
-        assert!(index < QUEUE_SIZE);
+        assert!(index < QUEUE_LEN);
         assert!(!self.free[index]);
         self.queue.descriptors[index].free();
         self.free[index] = true;

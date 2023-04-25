@@ -220,22 +220,22 @@ fn main() {
 
                 // Align the buffer to a page so that it can be mapped into the receivers address space
                 let size = capacity * BLOCK_SIZE as u64;
-                let aligned_size = librs::align_page_up(size as _) as u64;
-                let mut buffer = alloc::vec![0u8; aligned_size as usize];
+                let aligned_size = librs::align_page_up(size as _);
+                let mut buffer = alloc::vec![0u8; aligned_size].into_boxed_slice();
+                let buf_ptr = buffer.as_mut_ptr();
 
                 // Read out every sector of the block device
                 for sector in 0..capacity {
-                    println!("[virtio] reading sector {sector}");
-                    let contents = disk.read_sector(sector);
-                    buffer[sector as usize * BLOCK_SIZE..(sector as usize + 1) * BLOCK_SIZE]
-                        .copy_from_slice(&contents);
+                    println!("[virtio] reading sector {sector:#x}");
+                    let buf = unsafe { buf_ptr.add(sector as usize * BLOCK_SIZE) };
+                    unsafe { disk.read_sector(sector, buf) };
                 }
 
-                let buf_ptr = buffer.as_ptr() as u64;
-                let reply_data: &[u64] = &[buf_ptr, size];
-                println!("[virtio] transferring buffer at {buf_ptr:#x}");
+                let reply_data: &[u64] = &[buf_ptr as _, size];
+                let buffer = buffer.into_vec();
 
                 // Transfer the buffer to the receiver, we cannot access it afterwards
+                println!("[virtio] transferring buffer of size {size:#x}");
                 librs::syscall::transfer_memory(msg.server_id, buffer);
 
                 // Let the receiver know that the data is ready, and it can be found

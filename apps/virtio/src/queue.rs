@@ -1,8 +1,8 @@
-use alloc::{boxed::Box, fmt};
+use alloc::boxed::Box;
 use bitbybit::bitfield;
 use core::pin::Pin;
 
-pub const QUEUE_SIZE: usize = 16;
+pub const QUEUE_LEN: usize = 16;
 
 /// https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html#x1-320005
 #[derive(Debug, Default, Clone, Copy)]
@@ -47,7 +47,7 @@ impl From<u16> for DescriptorFlags {
 pub struct Available {
     pub flags: u16,
     pub index: u16,
-    pub ring: [u16; QUEUE_SIZE],
+    pub ring: [u16; QUEUE_LEN],
     pub used_event: u16,
 }
 
@@ -56,7 +56,7 @@ impl Default for Available {
         Self {
             flags: 0,
             index: 0,
-            ring: [0; QUEUE_SIZE],
+            ring: [0; QUEUE_LEN],
             used_event: 0,
         }
     }
@@ -71,54 +71,30 @@ pub struct UsedElement {
 }
 
 /// https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html#x1-430008
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[repr(C, align(4))]
 pub struct Used {
     pub flags: u16,
     pub index: u16,
-    pub ring: [UsedElement; QUEUE_SIZE],
+    pub ring: [UsedElement; QUEUE_LEN],
     pub available_event: u16,
 }
 
-impl Default for Used {
-    fn default() -> Self {
-        Self {
-            flags: 0,
-            index: 0,
-            ring: [UsedElement { id: 0, len: 0 }; QUEUE_SIZE],
-            available_event: 0,
-        }
-    }
-}
-
 /// https://docs.oasis-open.org/virtio/virtio/v1.1/cs01/virtio-v1.1-cs01.html#x1-260002
+#[derive(Debug)]
 #[repr(C, align(4096))]
 pub struct Queue {
-    _padding_0: [u8; 4096],
-    pub descriptors: [Descriptor; QUEUE_SIZE],
+    pub descriptors: [Descriptor; QUEUE_LEN],
     pub available: Available,
-    _padding_1: [u8; 4096],
     pub used: Used,
 }
 
 impl Queue {
     pub fn new() -> Pin<Box<Self>> {
         Box::pin(Self {
-            _padding_0: [0; 4096],
-            _padding_1: [0; 4096],
-            descriptors: [Descriptor::default(); QUEUE_SIZE],
+            descriptors: [Descriptor::default(); QUEUE_LEN],
             available: Available::default(),
             used: Used::default(),
         })
-    }
-}
-
-impl fmt::Debug for Queue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Queue")
-            .field("descriptors", &self.descriptors)
-            .field("available", &self.available)
-            .field("used", &self.used)
-            .finish()
     }
 }
