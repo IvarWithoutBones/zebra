@@ -25,7 +25,7 @@ const STACK_SIZE: usize = 40 * PAGE_SIZE;
 const TRAPFRAME_ADDR: usize = align_page_down(usize::MAX);
 static NEXT_PID: AtomicUsize = AtomicUsize::new(1);
 
-global_asm!(include_str!("context_switch.s"), TRAPFRAME_ADDR = const TRAPFRAME_ADDR);
+global_asm!(include_str!("context_switch.asm"), TRAPFRAME_ADDR = const TRAPFRAME_ADDR);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 enum ProcessState {

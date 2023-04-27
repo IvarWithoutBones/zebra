@@ -8,23 +8,6 @@ type UserInterruptHandler = Option<(usize, usize, u32)>;
 pub static INTERRUPT_HANDLERS: SpinLock<[(InterruptHandler, UserInterruptHandler); MAX_HANDLERS]> =
     SpinLock::new([(None, None); MAX_HANDLERS]);
 
-pub trait InterruptDevice {
-    fn identifier(&self) -> u16;
-    fn priority(&self) -> u8;
-    fn handle();
-}
-
-#[allow(dead_code)]
-pub fn add_device<T: InterruptDevice>(device: &T) {
-    set_priority(device.identifier(), device.priority());
-    enable_device(device.identifier());
-
-    let handlers = &mut INTERRUPT_HANDLERS.lock();
-    assert!(handlers[device.identifier() as usize].0.is_none());
-    assert!(handlers[device.identifier() as usize].1.is_none());
-    handlers[device.identifier() as usize].0 = Some(T::handle);
-}
-
 pub fn add_user(device_id: u16, pid: usize, handler_ptr: usize) {
     set_priority(device_id, 1);
     enable_device(device_id);

@@ -12,7 +12,7 @@ extern "C" {
     fn supervisor_trap_vector();
 }
 
-global_asm!(include_str!("./vector.s"));
+global_asm!(include_str!("./vector.asm"));
 
 pub unsafe fn attach_supervisor_trap_vector() {
     // Set the supervisor trap vector defined in `vector.s`, which will execute the Rust handler below

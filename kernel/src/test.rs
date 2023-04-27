@@ -1,42 +1,9 @@
-///! Integration for Rust language features that are not implemented by default on `no_std`.
+//! Integration for Rust language features that are not implemented by default on `no_std`.
 
 #[cfg(test)]
 use core::any::type_name;
-use {
-    crate::{power, uart::UART},
-    core::{arch::asm, fmt::Write, panic::PanicInfo},
-};
-
-/// Printing function that uses the UART to print to standard output.
-pub fn print(with_newline: bool, args: ::core::fmt::Arguments) {
-    UART.lock_with(|uart| {
-        if with_newline {
-            writeln!(uart, "{}", args).unwrap();
-        } else {
-            write!(uart, "{}", args).unwrap();
-        }
-    });
-}
-
-/// Printing helper that use the UART to print to standard output, with a newline.
-#[macro_export]
-macro_rules! println {
-    ($($args:tt)+) => {{
-        $crate::language_items::print(true, format_args!($($args)+));
-    }};
-
-    () => {{
-        $crate::language_items::print(true, format_args!(""));
-    }};
-}
-
-/// Printing helper that uses the UART to print to standard output.
-#[macro_export]
-macro_rules! print {
-    ($($args:tt)+) => {{
-        $crate::language_items::print(false, format_args!($($args)+));
-    }};
-}
+use crate::power;
+use core::{arch::asm, panic::PanicInfo};
 
 /// A wrapper around `Fn()` which can be used as a trait object,
 /// used to allow fetching the name of the test function.

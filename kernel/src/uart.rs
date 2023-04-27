@@ -1,4 +1,4 @@
-use crate::{power, spinlock::SpinLock, trap::plic::InterruptDevice};
+use crate::spinlock::SpinLock;
 use core::fmt::Write;
 
 // Re-export the uart module from the crate shared with userland.
@@ -6,36 +6,33 @@ pub use uart::{NS16550a, BASE_ADDR};
 
 pub static UART: SpinLock<uart::NS16550a> = SpinLock::new(NS16550a::DEFAULT);
 
-impl InterruptDevice for SpinLock<uart::NS16550a> {
-    fn identifier(&self) -> u16 {
-        uart::INTERRUPT_ID as _
-    }
+/// Printing function that uses the UART to print to standard output.
+pub fn print(with_newline: bool, args: ::core::fmt::Arguments) {
+    UART.lock_with(|uart| {
+        if with_newline {
+            writeln!(uart, "{args}").unwrap();
+        } else {
+            write!(uart, "{args}").unwrap();
+        }
+    });
+}
 
-    fn priority(&self) -> u8 {
-        1
-    }
+/// Printing helper that use the UART to print to standard output, with a newline.
+#[macro_export]
+macro_rules! println {
+    ($($args:tt)+) => {{
+        $crate::uart::print(true, format_args!($($args)+));
+    }};
 
-    fn handle() {
-        // TODO: blocking here is unfortunate, this should be moved to a queue instead.
-        UART.lock_with(|uart| {
-            while let Some(byte) = uart.poll() {
-                let c = byte as char;
-                writeln!(uart, "got char: '{c}' ({byte:#02x})").unwrap();
+    () => {{
+        $crate::uart::print(true, format_args!(""));
+    }};
+}
 
-                match c {
-                    'q' => {
-                        writeln!(uart, "shutting down").unwrap();
-                        power::shutdown(power::ExitType::Success);
-                    }
-
-                    'r' => {
-                        writeln!(uart, "rebooting").unwrap();
-                        power::shutdown(power::ExitType::Reboot);
-                    }
-
-                    _ => {}
-                }
-            }
-        });
-    }
+/// Printing helper that uses the UART to print to standard output.
+#[macro_export]
+macro_rules! print {
+    ($($args:tt)+) => {{
+        $crate::uart::print(false, format_args!($($args)+));
+    }};
 }
