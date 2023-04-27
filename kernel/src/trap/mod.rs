@@ -1,7 +1,7 @@
 pub mod clint;
 pub mod plic;
 
-use crate::{memory::page, process};
+use crate::memory::page;
 use core::{
     arch::{asm, global_asm},
     fmt::Debug,
@@ -172,30 +172,9 @@ extern "C" fn user_trap_handler(cause: usize) {
     let trap = Trap::from(cause);
     if let Trap::Interrupt(intr) = trap {
         intr.handle();
-    } else if trap == Trap::Exception(Exception::UserEnvironmentCall) {
-        process::syscall::handle();
-    } else {
-        process::scheduler::PROCESSES.lock_with(|procs| {
-            let stval = unsafe {
-                let value: usize;
-                asm!("csrr {}, stval", lateout(reg) value);
-                value
-            };
-
-            let sepc = unsafe {
-                let value: usize;
-                asm!("csrr {}, sepc", lateout(reg) value);
-                value
-            };
-
-            let offender = procs.remove_current().unwrap();
-            let pid = offender.pid;
-            let trap_frame = offender.trap_frame;
-            println!("killed process {pid} because of an unhandled trap: {trap:?}. stval = {stval:#x}, sepc = {sepc:#x}:\n{trap_frame}");
-        })
     }
 
-    process::scheduler::schedule();
+    crate::thread::handle_trap(cause as _);
 }
 
 /// The trap handler for Supervisor mode. This will be called by the respective

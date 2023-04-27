@@ -64,7 +64,7 @@ pub struct Process {
 impl Process {
     pub fn map_user_stack(page_table: &mut page::Table, size: usize) -> *mut u8 {
         // TODO: guard page
-        let user_stack = { allocator().allocate(STACK_SIZE).unwrap() };
+        let user_stack = { allocator().allocate(size).unwrap() };
 
         // Map the users stack
         for page in 0..size {

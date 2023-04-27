@@ -77,6 +77,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "init"
+version = "0.1.0"
+dependencies = [
+ "librs",
+]
+
+[[package]]
 name = "librs"
 version = "0.1.0"
 dependencies = [

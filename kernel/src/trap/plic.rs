@@ -1,4 +1,4 @@
-use crate::{process, spinlock::SpinLock};
+use crate::spinlock::SpinLock;
 
 pub const BASE_ADDR: usize = 0x0c00_0000;
 const MAX_HANDLERS: usize = 1024;
@@ -46,7 +46,8 @@ pub fn handle_interrupt() {
     }
 
     if let Some((pid, handler_ptr, irq_id)) = unlocked_handler {
-        process::interrupt::handle(irq_id, handler_ptr, pid);
+        panic!()
+        // process::interrupt::handle(irq_id, handler_ptr, pid);
     }
 }
 

@@ -62,6 +62,7 @@ pub fn map_trampoline(page_table: &mut page::Table) {
 pub fn map_kernel(page_table: &mut page::Table) {
     // Map the linker sections
     map_trampoline(page_table);
+
     page_table.identity_map(
         rodata_start(),
         rodata_end(),

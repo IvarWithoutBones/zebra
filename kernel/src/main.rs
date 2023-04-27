@@ -3,16 +3,19 @@
 #![test_runner(test::test_runner)]
 #![no_std]
 #![no_main]
+// TODO: remove together with legacy process API once the userland scheduler is functional
+#![allow(dead_code, unused_variables)]
 
 #[macro_use]
 mod uart;
 mod elf;
-mod ipc;
-mod test;
+// mod ipc;
 mod memory;
 mod power;
-mod process;
+// mod process;
 mod spinlock;
+mod test;
+mod thread;
 mod trap;
 
 extern crate alloc;
@@ -22,7 +25,7 @@ use core::arch::global_asm;
 global_asm!(include_str!("./entry.asm"));
 
 // Until a filesystem is implemented this is good enough for me :^)
-const SHELL_ELF: &[u8] = include_bytes!("../../target/riscv64gc-unknown-none-elf/debug/shell");
+const INIT_ELF: &[u8] = include_bytes!("../../target/riscv64gc-unknown-none-elf/debug/init");
 
 #[no_mangle]
 extern "C" fn kernel_main() {
@@ -47,10 +50,19 @@ extern "C" fn kernel_main() {
     #[cfg(test)]
     test_entry_point();
 
-    let proc = process::Process::new(SHELL_ELF);
-    println!("\n{proc:#?}\n");
-    process::scheduler::insert(proc);
+    let mut thread = thread::Thread::new();
+    let entry_point = elf::load_elf(INIT_ELF, &mut thread.page_table);
+    println!("entry point: {entry_point:#x}");
+    thread.trap_frame.user_state[thread::context::Registers::ProgramCounter] = entry_point;
+    println!("trap frame: {thread:#?}\nrunning");
 
-    println!("starting scheduler\n");
-    process::scheduler::schedule();
+    thread.page_table.identity_map(
+        uart::BASE_ADDR as usize,
+        uart::BASE_ADDR as usize + 5,
+        memory::page::EntryAttributes::UserReadWrite,
+    );
+
+    memory::allocator().disable();
+    thread::set_thread_controller(thread);
+    unsafe { (*thread::thread_controller()).thread.switch_into() };
 }

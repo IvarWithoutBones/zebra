@@ -25,13 +25,16 @@ pub struct Allocator {
     pages: [usize; TOTAL_PAGES],
     /// The base address of the heap.
     base_addr: usize,
+    /// Whether we are allowed to allocate or deallocate memory.
+    active: bool,
 }
 
 impl Allocator {
     const fn new() -> Self {
         Self {
             pages: [0; TOTAL_PAGES],
-            // Must be initialized later.
+            active: false,
+            // Must be initialized later as we cannot access the heap symbols from a const fn.
             base_addr: 0,
         }
     }
@@ -44,11 +47,20 @@ impl Allocator {
         self.offset_addr_of(page) as *mut u8
     }
 
+    pub fn disable(&mut self) {
+        self.active = false;
+    }
+
+    pub fn enable(&mut self) {
+        self.active = true;
+    }
+
     fn offset_page_of(&self, ptr: *mut u8) -> usize {
         (ptr as usize).saturating_sub(self.base_addr) / PAGE_SIZE
     }
 
     pub fn allocate(&mut self, size: usize) -> Option<*mut u8> {
+        assert!(self.active, "allocator is inactive but allocate was called");
         let pages_needed = align_page_up(size) / PAGE_SIZE;
         for i in 0..TOTAL_PAGES {
             if self.pages[i] != 0 {
@@ -79,6 +91,7 @@ impl Allocator {
 
     /// Deallocates a pointer.
     pub fn deallocate(&mut self, ptr: *mut u8) {
+        assert!(self.active, "allocator is inactive but deallocate was called");
         let id = self.offset_page_of(ptr);
         let page_stride = self.pages.get(id).cloned().unwrap();
         for i in 0..page_stride {
@@ -86,16 +99,16 @@ impl Allocator {
         }
     }
 
-    pub fn size_of(&self, ptr: *mut u8) -> usize {
-        let id = self.offset_page_of(ptr);
-        self.pages[id] * PAGE_SIZE
-    }
+    // pub fn size_of(&self, ptr: *mut u8) -> usize {
+    //     let id = self.offset_page_of(ptr);
+    //     self.pages[id] * PAGE_SIZE
+    // }
 }
 
-// NOTE: Before this is called heap allocations will deadlock the kernel!
 // TODO: use core::cell::OnceCell once it is stabilized.
 pub unsafe fn init() {
     ALLOCATOR.lock_with(|alloc| {
         alloc.base_addr = align_page_up(sections::heap_start());
+        alloc.enable();
     });
 }
