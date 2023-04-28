@@ -41,11 +41,14 @@
             just
             jq
             qemu
-            gdb
             cargo-binutils
             nil
             nixpkgs-fmt
-          ];
+          ] ++ lib.optional pkgs.stdenv.isLinux pkgs.gdb
+          ++ lib.optional pkgs.stdenv.isDarwin (pkgs.gdb.override {
+            # Fix for https://github.com/NixOS/nixpkgs/pull/223240#issuecomment-1527198145
+            enableDebuginfod = false;
+          });
         };
       }) // {
       # Does not need the system attribute

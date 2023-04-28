@@ -87,8 +87,8 @@ impl Thread {
 
         let mut trap_frame = unsafe {
             context::TrapFrame::new(
-                kernel_stack.as_ptr().add(KERNEL_STACK_SIZE),
-                user_stack.as_ptr().add(USER_STACK_SIZE),
+                kernel_stack.as_ptr().add(kernel_stack.len()),
+                user_stack.as_ptr().add(user_stack.len()),
             )
         };
 
